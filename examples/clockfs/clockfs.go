@@ -125,7 +125,6 @@ func (d *Dir) ReadDirAll(ctx context.Context) ([]fuse.Dirent, error) {
 }
 
 type File struct {
-	fs.NodeRef
 	fuse    *fs.Server
 	content atomic.Value
 	count   uint64
