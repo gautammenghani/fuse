@@ -1820,7 +1820,7 @@ type ReleaseRequest struct {
 	Handle       HandleID
 	Flags        OpenFlags // flags from OpenRequest
 	ReleaseFlags ReleaseFlags
-	LockOwner    uint32
+	LockOwner    uint64
 }
 
 var _ = Request(&ReleaseRequest{})
