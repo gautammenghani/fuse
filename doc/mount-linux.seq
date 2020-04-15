@@ -15,6 +15,11 @@ seqdiag {
   fuse <<-- fusermount [diagonal, label="exit, receive /dev/fuse fd", leftnote="on Linux, successful exit here\nmeans the mount has happened,\nthough InitRequest might not have yet"];
   app <-- fuse [label="Mount returns\nConn.Ready is already closed", rightnote="InitRequest and StatfsRequest\nmay or may not be seen\nbefore Conn.Ready,\ndepending on platform"];
 
+  fuse => kernel [label="read /dev/fuse fd: initRequest"];
+  fuse => kernel [label="write /dev/fuse fd: initResponse"];
+
+  app <-- fuse [label="Mount returns"];
+
   app -> fuse [label="fs.Serve"];
   fuse => kernel [label="read /dev/fuse fd", note="starts with InitRequest"];
   fuse => app [label="FS/Node/Handle methods"];

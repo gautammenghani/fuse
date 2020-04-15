@@ -26,5 +26,8 @@ Linux, the mountpoint is there but all operations will fail:
 ![Diagram of Linux error handling](mount-linux-error-init.seq.png)
 
 On OS X, the mount never happened:
+=======
+Let's see what happens if `initRequest` gets an error response.
+The mountpoint is temporarily there but all operations will fail:
 
 ![Diagram of OS X error handling](mount-osx-error-init.seq.png)

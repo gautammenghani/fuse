@@ -128,7 +128,7 @@ type Conn struct {
 	wio sync.RWMutex
 	rio sync.RWMutex
 
-	// Protocol version negotiated with InitRequest/InitResponse.
+	// Protocol version negotiated with initRequest/initResponse.
 	proto Protocol
 }
 
@@ -210,7 +210,7 @@ func initMount(c *Conn, conf *mountConfig) error {
 		}
 		return err
 	}
-	r, ok := req.(*InitRequest)
+	r, ok := req.(*initRequest)
 	if !ok {
 		return fmt.Errorf("missing init, got: %T", req)
 	}
@@ -232,7 +232,7 @@ func initMount(c *Conn, conf *mountConfig) error {
 	}
 	c.proto = proto
 
-	s := &InitResponse{
+	s := &initResponse{
 		Library:      proto,
 		MaxReadahead: conf.maxReadahead,
 		MaxWrite:     maxWrite,
@@ -973,7 +973,7 @@ loop:
 		if m.len() < unsafe.Sizeof(*in) {
 			goto corrupt
 		}
-		req = &InitRequest{
+		req = &initRequest{
 			Header:       m.Header(),
 			Kernel:       Protocol{in.Major, in.Minor},
 			MaxReadahead: in.MaxReadahead,
@@ -1224,8 +1224,8 @@ func (c *Conn) InvalidateEntry(parent NodeID, name string) error {
 	return c.sendInvalidate(buf)
 }
 
-// An InitRequest is the first request sent on a FUSE file system.
-type InitRequest struct {
+// An initRequest is the first request sent on a FUSE file system.
+type initRequest struct {
 	Header `json:"-"`
 	Kernel Protocol
 	// Maximum readahead in bytes that the kernel plans to use.
@@ -1233,17 +1233,17 @@ type InitRequest struct {
 	Flags        InitFlags
 }
 
-var _ = Request(&InitRequest{})
+var _ = Request(&initRequest{})
 
-func (r *InitRequest) String() string {
+func (r *initRequest) String() string {
 	return fmt.Sprintf("Init [%v] %v ra=%d fl=%v", &r.Header, r.Kernel, r.MaxReadahead, r.Flags)
 }
 
-// An InitResponse is the response to an InitRequest.
-type InitResponse struct {
+// An initResponse is the response to an initRequest.
+type initResponse struct {
 	Library Protocol
 	// Maximum readahead in bytes that the kernel can use. Ignored if
-	// greater than InitRequest.MaxReadahead.
+	// greater than initRequest.MaxReadahead.
 	MaxReadahead uint32
 	Flags        InitFlags
 	// Maximum size of a single write operation.
@@ -1251,12 +1251,12 @@ type InitResponse struct {
 	MaxWrite uint32
 }
 
-func (r *InitResponse) String() string {
+func (r *initResponse) String() string {
 	return fmt.Sprintf("Init %v ra=%d fl=%v w=%d", r.Library, r.MaxReadahead, r.Flags, r.MaxWrite)
 }
 
 // Respond replies to the request with the given response.
-func (r *InitRequest) Respond(resp *InitResponse) {
+func (r *initRequest) Respond(resp *initResponse) {
 	buf := newBuffer(unsafe.Sizeof(initOut{}))
 	out := (*initOut)(buf.alloc(unsafe.Sizeof(initOut{})))
 	out.Major = resp.Library.Major
