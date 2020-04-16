@@ -383,6 +383,9 @@ const (
 	opInterrupt   = 36
 	opBmap        = 37
 	opDestroy     = 38
+	opIoctl       = 39
+	opPoll        = 40
+	opNotifyReply = 41
 
 	// OS X
 	opSetvolname = 61
@@ -774,4 +777,23 @@ type notifyStoreOut struct {
 	Offset uint64
 	Size   uint32
 	_      uint32
+}
+
+type notifyRetrieveOut struct {
+	NotifyUnique uint64
+	Nodeid       uint64
+	Offset       uint64
+	Size         uint32
+	_            uint32
+}
+
+type notifyRetrieveIn struct {
+	// matches writeIn
+
+	_      uint64
+	Offset uint64
+	Size   uint32
+	_      uint32
+	_      uint64
+	_      uint64
 }
