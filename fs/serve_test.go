@@ -1886,8 +1886,21 @@ func TestTruncateWithOpen(t *testing.T) {
 	if g, e := gotr.Size, uint64(0); g != e {
 		t.Errorf("got Size = %q; want %q", g, e)
 	}
+
 	// osxfuse sets SetattrHandle here, linux does not
 	if g, e := gotr.Valid&^(fuse.SetattrLockOwner|fuse.SetattrHandle), fuse.SetattrSize; g != e {
+		t.Errorf("got Valid = %q; want %q", g, e)
+	}
+
+	got := gotr.Valid
+	if runtime.GOOS == "freebsd" {
+		// FreeBSD seems to set this but Linux doesn't??? Want to
+		// detect if Linux starts adding it. I assume the logic is
+		// something like the truncate happens before the open; or it
+		// just slipped by.
+		got &^= fuse.SetattrHandle
+	}
+	if g, e := got&^fuse.SetattrLockOwner, fuse.SetattrSize; g != e {
 		t.Errorf("got Valid = %q; want %q", g, e)
 	}
 	t.Logf("Got request: %#v", gotr)
