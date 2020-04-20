@@ -44,9 +44,9 @@ import (
 // The FUSE version implemented by the package.
 const (
 	protoVersionMinMajor = 7
-	protoVersionMinMinor = 15
+	protoVersionMinMinor = 16
 	protoVersionMaxMajor = 7
-	protoVersionMaxMinor = 15
+	protoVersionMaxMinor = 16
 )
 
 const (
@@ -386,6 +386,7 @@ const (
 	opIoctl       = 39
 	opPoll        = 40
 	opNotifyReply = 41
+	opBatchForget = 42
 
 	// OS X
 	opSetvolname = 61
@@ -414,6 +415,16 @@ func entryOutSize(p Protocol) uintptr {
 
 type forgetIn struct {
 	Nlookup uint64
+}
+
+type forgetOne struct {
+	NodeID  uint64
+	Nlookup uint64
+}
+
+type batchForgetIn struct {
+	Count uint32
+	_     uint32
 }
 
 type getattrIn struct {
