@@ -131,6 +131,8 @@ type Conn struct {
 
 	// Protocol version negotiated with initRequest/initResponse.
 	proto Protocol
+	// Feature flags negotiated with initRequest/initResponse.
+	flags InitFlags
 }
 
 // MountpointDoesNotExistError is an error returned when the
@@ -233,10 +235,11 @@ func initMount(c *Conn, conf *mountConfig) error {
 	}
 	c.proto = proto
 
+	c.flags = r.Flags & (InitBigWrites | conf.initFlags)
 	s := &initResponse{
 		Library:             proto,
 		MaxReadahead:        conf.maxReadahead,
-		Flags:               InitBigWrites | conf.initFlags,
+		Flags:               c.flags,
 		MaxBackground:       conf.maxBackground,
 		CongestionThreshold: conf.congestionThreshold,
 		MaxWrite:            maxWrite,
@@ -568,6 +571,13 @@ func (c *Conn) fd() int {
 
 func (c *Conn) Protocol() Protocol {
 	return c.proto
+}
+
+// Features reports the feature flags negotiated between the kernel and
+// the FUSE library. See MountOption for how to influence features
+// activated.
+func (c *Conn) Features() InitFlags {
+	return c.flags
 }
 
 // ReadRequest returns the next FUSE request from the kernel.
