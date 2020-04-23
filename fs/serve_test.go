@@ -56,7 +56,7 @@ type symlink struct {
 }
 
 func (f symlink) Attr(ctx context.Context, a *fuse.Attr) error {
-	a.Mode = os.ModeSymlink | 0666
+	a.Mode = os.ModeSymlink | 0o666
 	return nil
 }
 
@@ -64,7 +64,7 @@ func (f symlink) Attr(ctx context.Context, a *fuse.Attr) error {
 type fifo struct{}
 
 func (f fifo) Attr(ctx context.Context, a *fuse.Attr) error {
-	a.Mode = os.ModeNamedPipe | 0666
+	a.Mode = os.ModeNamedPipe | 0o666
 	return nil
 }
 
@@ -137,7 +137,7 @@ func (f testPanic) Root() (fs.Node, error) {
 
 func (f testPanic) Attr(ctx context.Context, a *fuse.Attr) error {
 	a.Inode = 1
-	a.Mode = os.ModeDir | 0777
+	a.Mode = os.ModeDir | 0o777
 	return nil
 }
 
@@ -146,7 +146,7 @@ func (f testPanic) Mkdir(ctx context.Context, req *fuse.MkdirRequest) (fs.Node, 
 }
 
 func doPanic(ctx context.Context, dir string) (*struct{}, error) {
-	err := os.Mkdir(dir+"/trigger-a-panic", 0700)
+	err := os.Mkdir(dir+"/trigger-a-panic", 0o700)
 	if nerr, ok := err.(*os.PathError); !ok || nerr.Err != syscall.ENAMETOOLONG {
 		return nil, fmt.Errorf("wrong error from panicking handler: %T: %v", err, err)
 	}
@@ -180,7 +180,7 @@ func (f testStatFS) Root() (fs.Node, error) {
 
 func (f testStatFS) Attr(ctx context.Context, a *fuse.Attr) error {
 	a.Inode = 1
-	a.Mode = os.ModeDir | 0777
+	a.Mode = os.ModeDir | 0o777
 	return nil
 }
 
@@ -345,7 +345,7 @@ func (f root) Root() (fs.Node, error) {
 
 func (root) Attr(ctx context.Context, a *fuse.Attr) error {
 	a.Inode = 1
-	a.Mode = os.ModeDir | 0555
+	a.Mode = os.ModeDir | 0o555
 	// This has to be a power of two, but try to pick something that's an unlikely default.
 	a.BlockSize = 65536
 	return nil
@@ -389,7 +389,7 @@ func TestStatRoot(t *testing.T) {
 	if (got.Mode & os.ModeType) != os.ModeDir {
 		t.Errorf("root is not a directory: %v", got.Mode)
 	}
-	if p := got.Mode.Perm(); p != 0555 {
+	if p := got.Mode.Perm(); p != 0o555 {
 		t.Errorf("root has weird access mode: %v", p)
 	}
 	if got.Ino != 1 {
@@ -422,7 +422,7 @@ type readAll struct {
 const hi = "hello, world"
 
 func (readAll) Attr(ctx context.Context, a *fuse.Attr) error {
-	a.Mode = 0666
+	a.Mode = 0o666
 	a.Size = uint64(len(hi))
 	return nil
 }
@@ -479,7 +479,7 @@ type readWithHandleRead struct {
 }
 
 func (readWithHandleRead) Attr(ctx context.Context, a *fuse.Attr) error {
-	a.Mode = 0666
+	a.Mode = 0o666
 	a.Size = uint64(len(hi))
 	return nil
 }
@@ -515,7 +515,7 @@ type readFlags struct {
 }
 
 func (r *readFlags) Attr(ctx context.Context, a *fuse.Attr) error {
-	a.Mode = 0666
+	a.Mode = 0o666
 	a.Size = uint64(len(hi))
 	return nil
 }
@@ -527,7 +527,7 @@ func (r *readFlags) Read(ctx context.Context, req *fuse.ReadRequest, resp *fuse.
 }
 
 func doReadFileFlags(ctx context.Context, path string) (*struct{}, error) {
-	f, err := os.OpenFile(path, os.O_RDWR|os.O_APPEND, 0666)
+	f, err := os.OpenFile(path, os.O_RDWR|os.O_APPEND, 0o666)
 	if err != nil {
 		return nil, err
 	}
@@ -586,7 +586,7 @@ type writeFlags struct {
 }
 
 func (r *writeFlags) Attr(ctx context.Context, a *fuse.Attr) error {
-	a.Mode = 0666
+	a.Mode = 0o666
 	// do not set Size here or FreeBSD will do a read-modify-write,
 	// even if the write replaces whole page contents
 	return nil
@@ -606,7 +606,7 @@ func (r *writeFlags) Write(ctx context.Context, req *fuse.WriteRequest, resp *fu
 }
 
 func doWriteFileFlags(ctx context.Context, path string) (*struct{}, error) {
-	f, err := os.OpenFile(path, os.O_RDWR|os.O_APPEND, 0666)
+	f, err := os.OpenFile(path, os.O_RDWR|os.O_APPEND, 0o666)
 	if err != nil {
 		return nil, err
 	}
@@ -881,7 +881,7 @@ type writeFileRequest struct {
 }
 
 func doWriteFile(ctx context.Context, req writeFileRequest) (*struct{}, error) {
-	if err := ioutil.WriteFile(req.Path, req.Data, 0666); err != nil {
+	if err := ioutil.WriteFile(req.Path, req.Data, 0o666); err != nil {
 		return nil, fmt.Errorf("WriteFile: %v", err)
 	}
 	return &struct{}{}, nil
@@ -936,8 +936,8 @@ func (f *mkdir1) Mkdir(ctx context.Context, req *fuse.MkdirRequest) (fs.Node, er
 func doMkdir(ctx context.Context, path string) (*struct{}, error) {
 	// uniform umask needed to make os.Mkdir's mode into something
 	// reproducible
-	syscall.Umask(0022)
-	if err := os.Mkdir(path, 0771); err != nil {
+	syscall.Umask(0o022)
+	if err := os.Mkdir(path, 0o771); err != nil {
 		return nil, fmt.Errorf("mkdir: %v", err)
 	}
 	return &struct{}{}, nil
@@ -965,8 +965,8 @@ func TestMkdir(t *testing.T) {
 
 	want := fuse.MkdirRequest{
 		Name:  "foo",
-		Mode:  os.ModeDir | 0751,
-		Umask: 0022,
+		Mode:  os.ModeDir | 0o751,
+		Umask: 0o022,
 	}
 	if runtime.GOOS == "darwin" {
 		// https://github.com/osxfuse/osxfuse/issues/225
@@ -1002,8 +1002,8 @@ func (f *create1) Create(ctx context.Context, req *fuse.CreateRequest, resp *fus
 func doCreate(ctx context.Context, path string) (*struct{}, error) {
 	// uniform umask needed to make os.Mkdir's mode into something
 	// reproducible
-	syscall.Umask(0022)
-	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0640)
+	syscall.Umask(0o022)
+	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o640)
 	if err != nil {
 		return nil, fmt.Errorf("create1 WriteFile: %v", err)
 	}
@@ -1034,8 +1034,8 @@ func TestCreate(t *testing.T) {
 	want := fuse.CreateRequest{
 		Name:  "foo",
 		Flags: fuse.OpenReadWrite | fuse.OpenCreate | fuse.OpenTruncate,
-		Mode:  0640,
-		Umask: 0022,
+		Mode:  0o640,
+		Umask: 0o022,
 	}
 	if runtime.GOOS == "darwin" {
 		// OS X does not pass O_TRUNC here, Linux does; as this is a
@@ -1101,7 +1101,7 @@ func (f *create3) Remove(ctx context.Context, r *fuse.RemoveRequest) error {
 }
 
 func doCreateWriteRemove(ctx context.Context, path string) (*struct{}, error) {
-	if err := ioutil.WriteFile(path, []byte(hi), 0666); err != nil {
+	if err := ioutil.WriteFile(path, []byte(hi), 0o666); err != nil {
 		return nil, fmt.Errorf("WriteFile: %v", err)
 	}
 	if err := os.Remove(path); err != nil {
@@ -1400,8 +1400,8 @@ func (f *mknod1) Mknod(ctx context.Context, r *fuse.MknodRequest) (fs.Node, erro
 func doMknod(ctx context.Context, path string) (*struct{}, error) {
 	// uniform umask needed to make mknod's mode into something
 	// reproducible
-	syscall.Umask(0022)
-	if err := syscall.Mknod(path, syscall.S_IFIFO|0660, 123); err != nil {
+	syscall.Umask(0o022)
+	if err := syscall.Mknod(path, syscall.S_IFIFO|0o660, 123); err != nil {
 		return nil, err
 	}
 	return &struct{}{}, nil
@@ -1433,9 +1433,9 @@ func TestMknod(t *testing.T) {
 
 	want := fuse.MknodRequest{
 		Name:  "node",
-		Mode:  os.FileMode(os.ModeNamedPipe | 0640),
+		Mode:  os.FileMode(os.ModeNamedPipe | 0o640),
 		Rdev:  uint32(123),
-		Umask: 0022,
+		Umask: 0o022,
 	}
 	if runtime.GOOS == "linux" {
 		// Linux fuse doesn't echo back the rdev if the node
@@ -1462,7 +1462,7 @@ type dataHandleTest struct {
 }
 
 func (dataHandleTest) Attr(ctx context.Context, a *fuse.Attr) error {
-	a.Mode = 0666
+	a.Mode = 0o666
 	a.Size = uint64(len(hi))
 	return nil
 }
@@ -1505,7 +1505,7 @@ type interrupt struct {
 }
 
 func (interrupt) Attr(ctx context.Context, a *fuse.Attr) error {
-	a.Mode = 0666
+	a.Mode = 0o666
 	a.Size = 1
 	return nil
 }
@@ -1795,7 +1795,7 @@ type ftruncate struct {
 }
 
 func doFtruncate(ctx context.Context, req truncateRequest) (*struct{}, error) {
-	f, err := os.OpenFile(req.Path, os.O_WRONLY, 0666)
+	f, err := os.OpenFile(req.Path, os.O_WRONLY, 0o666)
 	if err != nil {
 		return nil, err
 	}
@@ -1856,7 +1856,7 @@ type truncateWithOpen struct {
 }
 
 func doTruncateWithOpen(ctx context.Context, path string) (*struct{}, error) {
-	fil, err := os.OpenFile(path, os.O_WRONLY|os.O_TRUNC, 0666)
+	fil, err := os.OpenFile(path, os.O_WRONLY|os.O_TRUNC, 0o666)
 	if err != nil {
 		return nil, err
 	}
@@ -2216,7 +2216,7 @@ func TestChmod(t *testing.T) {
 
 	req := chmodRequest{
 		Path: mnt.Dir + "/child",
-		Mode: 0764,
+		Mode: 0o764,
 	}
 	var nothing struct{}
 	if err := control.JSON("/").Call(ctx, req, &nothing); err != nil {
@@ -2224,7 +2224,7 @@ func TestChmod(t *testing.T) {
 	}
 
 	got := f.RecordedSetattr()
-	if g, e := got.Mode.Perm(), os.FileMode(0764); g != e {
+	if g, e := got.Mode.Perm(), os.FileMode(0o764); g != e {
 		t.Errorf("wrong mode: %o %v != %o %v", g, g, e, e)
 	}
 	ftype := got.Mode & os.ModeType
@@ -3033,7 +3033,7 @@ func (f *inMemoryFile) Attr(ctx context.Context, a *fuse.Attr) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	a.Mode = 0666
+	a.Mode = 0o666
 	a.Size = uint64(len(f.data))
 	return nil
 }
@@ -3302,7 +3302,7 @@ var _ fs.Node = (*invalidateAttr)(nil)
 func (i *invalidateAttr) Attr(ctx context.Context, a *fuse.Attr) error {
 	i.attr.Inc()
 	i.t.Logf("Attr called, #%d", i.attr.Count())
-	a.Mode = 0600
+	a.Mode = 0o600
 	return nil
 }
 
@@ -3378,7 +3378,7 @@ var _ fs.Node = (*invalidateData)(nil)
 func (i *invalidateData) Attr(ctx context.Context, a *fuse.Attr) error {
 	i.attr.Inc()
 	i.t.Logf("Attr called, #%d", i.attr.Count())
-	a.Mode = 0600
+	a.Mode = 0o600
 	a.Size = uint64(len(i.data.Load().(string)))
 	return nil
 }
@@ -3631,7 +3631,7 @@ var _ fs.Node = (*invalidateDataPartial)(nil)
 func (i *invalidateDataPartial) Attr(ctx context.Context, a *fuse.Attr) error {
 	i.attr.Inc()
 	i.t.Logf("Attr called, #%d", i.attr.Count())
-	a.Mode = 0600
+	a.Mode = 0o600
 	a.Size = uint64(len(invalidateDataPartialContent))
 	return nil
 }
@@ -3772,7 +3772,7 @@ type invalidateEntryRoot struct {
 var _ fs.Node = (*invalidateEntryRoot)(nil)
 
 func (i *invalidateEntryRoot) Attr(ctx context.Context, a *fuse.Attr) error {
-	a.Mode = 0600 | os.ModeDir
+	a.Mode = 0o600 | os.ModeDir
 	return nil
 }
 
@@ -3836,7 +3836,7 @@ type cachedFile struct {
 var _ fs.Node = cachedFile{}
 
 func (f cachedFile) Attr(ctx context.Context, a *fuse.Attr) error {
-	a.Mode = 0666
+	a.Mode = 0o666
 	// FreeBSD won't issue reads if the file is empty.
 	a.Size = 4096
 	return nil
@@ -4120,7 +4120,7 @@ type readPolledNode struct {
 var _ fs.Node = (*readPolledNode)(nil)
 
 func (readPolledNode) Attr(ctx context.Context, a *fuse.Attr) error {
-	a.Mode = 0666
+	a.Mode = 0o666
 	a.Size = uint64(len(hi))
 	return nil
 }
@@ -4170,7 +4170,7 @@ type readPolledNodeWithHandle struct {
 var _ fs.Node = (*readPolledNodeWithHandle)(nil)
 
 func (readPolledNodeWithHandle) Attr(ctx context.Context, a *fuse.Attr) error {
-	a.Mode = 0666
+	a.Mode = 0o666
 	a.Size = uint64(len(hi))
 	return nil
 }
@@ -4324,7 +4324,7 @@ type lockReq struct {
 func (lh *lockHelp) doLock(ctx context.Context, req *lockReq) (*struct{}, error) {
 	lh.mu.Lock()
 	defer lh.mu.Unlock()
-	f, err := os.OpenFile(req.Path, os.O_RDWR, 0644)
+	f, err := os.OpenFile(req.Path, os.O_RDWR, 0o644)
 	if err != nil {
 		return nil, fmt.Errorf("open: %v", err)
 	}

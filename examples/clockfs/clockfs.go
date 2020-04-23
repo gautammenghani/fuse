@@ -97,7 +97,7 @@ var _ fs.Node = (*Dir)(nil)
 
 func (d *Dir) Attr(ctx context.Context, a *fuse.Attr) error {
 	a.Inode = 1
-	a.Mode = os.ModeDir | 0555
+	a.Mode = os.ModeDir | 0o555
 	return nil
 }
 
@@ -130,7 +130,7 @@ var _ fs.Node = (*File)(nil)
 
 func (f *File) Attr(ctx context.Context, a *fuse.Attr) error {
 	a.Inode = 2
-	a.Mode = 0444
+	a.Mode = 0o444
 	t := f.content.Load().(string)
 	a.Size = uint64(len(t))
 	return nil
