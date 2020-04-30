@@ -608,7 +608,10 @@ func (n nodeRefcountDropBug) String() string {
 	return fmt.Sprintf("bug: trying to drop %d of %d references to %v", n.N, n.Refs, n.Node)
 }
 
-func (c *Server) dropNode(id fuse.NodeID, n uint64) (forget bool) {
+// dropNode decreases reference count for node with id by n.
+// If reference count dropped to zero, returns true.
+// Note that node is not guaranteed to be non-nil.
+func (c *Server) dropNode(id fuse.NodeID, n uint64) (node Node, forget bool) {
 	c.meta.Lock()
 	defer c.meta.Unlock()
 	snode := c.node[id]
@@ -621,7 +624,7 @@ func (c *Server) dropNode(id fuse.NodeID, n uint64) (forget bool) {
 
 		// we may end up triggering Forget twice, but that's better
 		// than not even once, and that's the best we can do
-		return true
+		return nil, true
 	}
 
 	if n > snode.refs {
@@ -635,9 +638,9 @@ func (c *Server) dropNode(id fuse.NodeID, n uint64) (forget bool) {
 		c.node[id] = nil
 		delete(c.nodeRef, snode.node)
 		c.freeNode = append(c.freeNode, id)
-		return true
+		return snode.node, true
 	}
-	return false
+	return nil, false
 }
 
 func (c *Server) dropHandle(id fuse.HandleID) {
@@ -1305,7 +1308,7 @@ func (c *Server) handleRequest(ctx context.Context, node Node, snode *serveNode,
 		return nil
 
 	case *fuse.ForgetRequest:
-		forget := c.dropNode(r.Hdr().Node, r.N)
+		_, forget := c.dropNode(r.Hdr().Node, r.N)
 		if forget {
 			n, ok := node.(NodeForgetter)
 			if ok {
@@ -1317,8 +1320,16 @@ func (c *Server) handleRequest(ctx context.Context, node Node, snode *serveNode,
 		return nil
 
 	case *fuse.BatchForgetRequest:
+		// node is nil here because BatchForget as a message is not
+		// aimed at a any one node
 		for _, item := range r.Forget {
-			forget := c.dropNode(item.NodeID, item.N)
+			node, forget := c.dropNode(item.NodeID, item.N)
+			// node can be nil here if kernel vs our refcount were out
+			// of sync and multiple Forgets raced each other
+			if node == nil {
+				// nothing we can do about that
+				continue
+			}
 			if forget {
 				n, ok := node.(NodeForgetter)
 				if ok {
