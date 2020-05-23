@@ -311,5 +311,5 @@ func TestMountOptionCongestionThreshold(t *testing.T) {
 	defer mnt.Close()
 
 	// TODO figure out our connection id and read
-	// /sys/fs/fuse/connections/NUM/max_background
+	// /sys/fs/fuse/connections/NUM/congestion_threshold
 }
