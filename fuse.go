@@ -369,8 +369,8 @@ var errnoNames = map[Errno]string{
 // Errno implements Error and ErrorNumber using a syscall.Errno.
 type Errno syscall.Errno
 
-var _ = ErrorNumber(Errno(0))
-var _ = error(Errno(0))
+var _ ErrorNumber = Errno(0)
+var _ error = Errno(0)
 
 func (e Errno) Errno() Errno {
 	return e
@@ -1420,7 +1420,7 @@ type initRequest struct {
 	Flags        InitFlags
 }
 
-var _ = Request(&initRequest{})
+var _ Request = (*initRequest)(nil)
 
 func (r *initRequest) String() string {
 	return fmt.Sprintf("Init [%v] %v ra=%d fl=%v", &r.Header, r.Kernel, r.MaxReadahead, r.Flags)
@@ -1431,7 +1431,7 @@ type UnrecognizedRequest struct {
 	Opcode uint32
 }
 
-var _ = Request(&UnrecognizedRequest{})
+var _ Request = (*UnrecognizedRequest)(nil)
 
 func (r *UnrecognizedRequest) String() string {
 	return fmt.Sprintf("Unrecognized [%v] opcode=%d", &r.Header, r.Opcode)
@@ -1482,7 +1482,7 @@ type StatfsRequest struct {
 	Header `json:"-"`
 }
 
-var _ = Request(&StatfsRequest{})
+var _ Request = (*StatfsRequest)(nil)
 
 func (r *StatfsRequest) String() string {
 	return fmt.Sprintf("Statfs [%s]", &r.Header)
@@ -1534,7 +1534,7 @@ type AccessRequest struct {
 	Mask   uint32
 }
 
-var _ = Request(&AccessRequest{})
+var _ Request = (*AccessRequest)(nil)
 
 func (r *AccessRequest) String() string {
 	return fmt.Sprintf("Access [%s] mask=%#x", &r.Header, r.Mask)
@@ -1628,7 +1628,7 @@ type GetattrRequest struct {
 	Handle HandleID
 }
 
-var _ = Request(&GetattrRequest{})
+var _ Request = (*GetattrRequest)(nil)
 
 func (r *GetattrRequest) String() string {
 	return fmt.Sprintf("Getattr [%s] %v fl=%v", &r.Header, r.Handle, r.Flags)
@@ -1671,7 +1671,7 @@ type GetxattrRequest struct {
 	Position uint32
 }
 
-var _ = Request(&GetxattrRequest{})
+var _ Request = (*GetxattrRequest)(nil)
 
 func (r *GetxattrRequest) String() string {
 	return fmt.Sprintf("Getxattr [%s] %q %d @%d", &r.Header, r.Name, r.Size, r.Position)
@@ -1707,7 +1707,7 @@ type ListxattrRequest struct {
 	Position uint32 // offset within attribute list
 }
 
-var _ = Request(&ListxattrRequest{})
+var _ Request = (*ListxattrRequest)(nil)
 
 func (r *ListxattrRequest) String() string {
 	return fmt.Sprintf("Listxattr [%s] %d @%d", &r.Header, r.Size, r.Position)
@@ -1750,7 +1750,7 @@ type RemovexattrRequest struct {
 	Name   string // name of extended attribute
 }
 
-var _ = Request(&RemovexattrRequest{})
+var _ Request = (*RemovexattrRequest)(nil)
 
 func (r *RemovexattrRequest) String() string {
 	return fmt.Sprintf("Removexattr [%s] %q", &r.Header, r.Name)
@@ -1787,7 +1787,7 @@ type SetxattrRequest struct {
 	Xattr []byte
 }
 
-var _ = Request(&SetxattrRequest{})
+var _ Request = (*SetxattrRequest)(nil)
 
 func trunc(b []byte, max int) ([]byte, string) {
 	if len(b) > max {
@@ -1813,7 +1813,7 @@ type LookupRequest struct {
 	Name   string
 }
 
-var _ = Request(&LookupRequest{})
+var _ Request = (*LookupRequest)(nil)
 
 func (r *LookupRequest) String() string {
 	return fmt.Sprintf("Lookup [%s] %q", &r.Header, r.Name)
@@ -1857,7 +1857,7 @@ type OpenRequest struct {
 	Flags  OpenFlags
 }
 
-var _ = Request(&OpenRequest{})
+var _ Request = (*OpenRequest)(nil)
 
 func (r *OpenRequest) String() string {
 	return fmt.Sprintf("Open [%s] dir=%v fl=%v", &r.Header, r.Dir, r.Flags)
@@ -1896,7 +1896,7 @@ type CreateRequest struct {
 	Umask os.FileMode
 }
 
-var _ = Request(&CreateRequest{})
+var _ Request = (*CreateRequest)(nil)
 
 func (r *CreateRequest) String() string {
 	return fmt.Sprintf("Create [%s] %q fl=%v mode=%v umask=%v", &r.Header, r.Name, r.Flags, r.Mode, r.Umask)
@@ -1943,7 +1943,7 @@ type MkdirRequest struct {
 	Umask os.FileMode
 }
 
-var _ = Request(&MkdirRequest{})
+var _ Request = (*MkdirRequest)(nil)
 
 func (r *MkdirRequest) String() string {
 	return fmt.Sprintf("Mkdir [%s] %q mode=%v umask=%v", &r.Header, r.Name, r.Mode, r.Umask)
@@ -1985,7 +1985,7 @@ type ReadRequest struct {
 	FileFlags OpenFlags
 }
 
-var _ = Request(&ReadRequest{})
+var _ Request = (*ReadRequest)(nil)
 
 func (r *ReadRequest) String() string {
 	return fmt.Sprintf("Read [%s] %v %d @%#x dir=%v fl=%v owner=%v ffl=%v", &r.Header, r.Handle, r.Size, r.Offset, r.Dir, r.Flags, r.LockOwner, r.FileFlags)
@@ -2028,7 +2028,7 @@ type ReleaseRequest struct {
 	LockOwner    LockOwner
 }
 
-var _ = Request(&ReleaseRequest{})
+var _ Request = (*ReleaseRequest)(nil)
 
 func (r *ReleaseRequest) String() string {
 	return fmt.Sprintf("Release [%s] %v fl=%v rfl=%v owner=%v", &r.Header, r.Handle, r.Flags, r.ReleaseFlags, r.LockOwner)
@@ -2047,7 +2047,7 @@ type DestroyRequest struct {
 	Header `json:"-"`
 }
 
-var _ = Request(&DestroyRequest{})
+var _ Request = (*DestroyRequest)(nil)
 
 func (r *DestroyRequest) String() string {
 	return fmt.Sprintf("Destroy [%s]", &r.Header)
@@ -2066,7 +2066,7 @@ type ForgetRequest struct {
 	N      uint64
 }
 
-var _ = Request(&ForgetRequest{})
+var _ Request = (*ForgetRequest)(nil)
 
 func (r *ForgetRequest) String() string {
 	return fmt.Sprintf("Forget [%s] %d", &r.Header, r.N)
@@ -2088,7 +2088,7 @@ type BatchForgetRequest struct {
 	Forget []BatchForgetItem
 }
 
-var _ = Request(&BatchForgetRequest{})
+var _ Request = (*BatchForgetRequest)(nil)
 
 func (r *BatchForgetRequest) String() string {
 	b := new(strings.Builder)
@@ -2201,7 +2201,7 @@ type WriteRequest struct {
 	FileFlags OpenFlags
 }
 
-var _ = Request(&WriteRequest{})
+var _ Request = (*WriteRequest)(nil)
 
 func (r *WriteRequest) String() string {
 	return fmt.Sprintf("Write [%s] %v %d @%d fl=%v owner=%v ffl=%v", &r.Header, r.Handle, len(r.Data), r.Offset, r.Flags, r.LockOwner, r.FileFlags)
@@ -2266,7 +2266,7 @@ type SetattrRequest struct {
 	Flags    uint32 // see chflags(2)
 }
 
-var _ = Request(&SetattrRequest{})
+var _ Request = (*SetattrRequest)(nil)
 
 func (r *SetattrRequest) String() string {
 	var buf bytes.Buffer
@@ -2350,7 +2350,7 @@ type FlushRequest struct {
 	LockOwner LockOwner
 }
 
-var _ = Request(&FlushRequest{})
+var _ Request = (*FlushRequest)(nil)
 
 func (r *FlushRequest) String() string {
 	return fmt.Sprintf("Flush [%s] %v fl=%#x owner=%v", &r.Header, r.Handle, r.Flags, r.LockOwner)
@@ -2370,7 +2370,7 @@ type RemoveRequest struct {
 	Dir    bool   // is this rmdir?
 }
 
-var _ = Request(&RemoveRequest{})
+var _ Request = (*RemoveRequest)(nil)
 
 func (r *RemoveRequest) String() string {
 	return fmt.Sprintf("Remove [%s] %q dir=%v", &r.Header, r.Name, r.Dir)
@@ -2388,7 +2388,7 @@ type SymlinkRequest struct {
 	NewName, Target string
 }
 
-var _ = Request(&SymlinkRequest{})
+var _ Request = (*SymlinkRequest)(nil)
 
 func (r *SymlinkRequest) String() string {
 	return fmt.Sprintf("Symlink [%s] from %q to target %q", &r.Header, r.NewName, r.Target)
@@ -2423,7 +2423,7 @@ type ReadlinkRequest struct {
 	Header `json:"-"`
 }
 
-var _ = Request(&ReadlinkRequest{})
+var _ Request = (*ReadlinkRequest)(nil)
 
 func (r *ReadlinkRequest) String() string {
 	return fmt.Sprintf("Readlink [%s]", &r.Header)
@@ -2442,7 +2442,7 @@ type LinkRequest struct {
 	NewName string
 }
 
-var _ = Request(&LinkRequest{})
+var _ Request = (*LinkRequest)(nil)
 
 func (r *LinkRequest) String() string {
 	return fmt.Sprintf("Link [%s] node %d to %q", &r.Header, r.OldNode, r.NewName)
@@ -2469,7 +2469,7 @@ type RenameRequest struct {
 	OldName, NewName string
 }
 
-var _ = Request(&RenameRequest{})
+var _ Request = (*RenameRequest)(nil)
 
 func (r *RenameRequest) String() string {
 	return fmt.Sprintf("Rename [%s] from %q to dirnode %v %q", &r.Header, r.OldName, r.NewDir, r.NewName)
@@ -2489,7 +2489,7 @@ type MknodRequest struct {
 	Umask os.FileMode
 }
 
-var _ = Request(&MknodRequest{})
+var _ Request = (*MknodRequest)(nil)
 
 func (r *MknodRequest) String() string {
 	return fmt.Sprintf("Mknod [%s] Name %q mode=%v umask=%v rdev=%d", &r.Header, r.Name, r.Mode, r.Umask, r.Rdev)
@@ -2517,7 +2517,7 @@ type FsyncRequest struct {
 	Dir   bool
 }
 
-var _ = Request(&FsyncRequest{})
+var _ Request = (*FsyncRequest)(nil)
 
 func (r *FsyncRequest) String() string {
 	return fmt.Sprintf("Fsync [%s] Handle %v Flags %v", &r.Header, r.Handle, r.Flags)
@@ -2535,7 +2535,7 @@ type InterruptRequest struct {
 	IntrID RequestID // ID of the request to be interrupt.
 }
 
-var _ = Request(&InterruptRequest{})
+var _ Request = (*InterruptRequest)(nil)
 
 func (r *InterruptRequest) Respond() {
 	// nothing to do here
@@ -2561,7 +2561,7 @@ type ExchangeDataRequest struct {
 	// TODO options
 }
 
-var _ = Request(&ExchangeDataRequest{})
+var _ Request = (*ExchangeDataRequest)(nil)
 
 func (r *ExchangeDataRequest) String() string {
 	// TODO options
@@ -2580,7 +2580,7 @@ type NotifyReply struct {
 	msg    *message
 }
 
-var _ = Request(&NotifyReply{})
+var _ Request = (*NotifyReply)(nil)
 
 func (r *NotifyReply) String() string {
 	return fmt.Sprintf("NotifyReply [%s]", &r.Header)
@@ -2689,7 +2689,7 @@ type LockRequest struct {
 	LockFlags LockFlags
 }
 
-var _ = Request(&LockRequest{})
+var _ Request = (*LockRequest)(nil)
 
 func (r *LockRequest) String() string {
 	return fmt.Sprintf("Lock [%s] %v owner=%v range=%d..%d type=%v pid=%v fl=%v", &r.Header, r.Handle, r.LockOwner, r.Lock.Start, r.Lock.End, r.Lock.Type, r.Lock.PID, r.LockFlags)
@@ -2707,9 +2707,9 @@ func (r *LockRequest) Respond() {
 // See LockRequest. LockWaitRequest can be converted to a LockRequest.
 type LockWaitRequest LockRequest
 
-var _ LockRequest = (LockRequest)(LockWaitRequest{})
+var _ LockRequest = LockRequest(LockWaitRequest{})
 
-var _ = Request(&LockWaitRequest{})
+var _ Request = (*LockWaitRequest)(nil)
 
 func (r *LockWaitRequest) String() string {
 	return fmt.Sprintf("LockWait [%s] %v owner=%v range=%d..%d type=%v pid=%v fl=%v", &r.Header, r.Handle, r.LockOwner, r.Lock.Start, r.Lock.End, r.Lock.Type, r.Lock.PID, r.LockFlags)
@@ -2727,9 +2727,9 @@ func (r *LockWaitRequest) Respond() {
 // See LockRequest. UnlockRequest can be converted to a LockRequest.
 type UnlockRequest LockRequest
 
-var _ LockRequest = (LockRequest)(UnlockRequest{})
+var _ LockRequest = LockRequest(UnlockRequest{})
 
-var _ = Request(&UnlockRequest{})
+var _ Request = (*UnlockRequest)(nil)
 
 func (r *UnlockRequest) String() string {
 	return fmt.Sprintf("Unlock [%s] %v owner=%v range=%d..%d type=%v pid=%v fl=%v", &r.Header, r.Handle, r.LockOwner, r.Lock.Start, r.Lock.End, r.Lock.Type, r.Lock.PID, r.LockFlags)
@@ -2756,7 +2756,7 @@ type QueryLockRequest struct {
 	LockFlags LockFlags
 }
 
-var _ = Request(&QueryLockRequest{})
+var _ Request = (*QueryLockRequest)(nil)
 
 func (r *QueryLockRequest) String() string {
 	return fmt.Sprintf("QueryLock [%s] %v owner=%v range=%d..%d type=%v pid=%v fl=%v", &r.Header, r.Handle, r.LockOwner, r.Lock.Start, r.Lock.End, r.Lock.Type, r.Lock.PID, r.LockFlags)
