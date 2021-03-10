@@ -12,6 +12,8 @@ In this fork, the following patches to _remove_ support for OSXFUSE have been dr
 
 After forking, a patch to introduce support for macFUSE 4 has been made [#1](https://github.com/zegl/fuse/pull/1).
 
+To use this fork in your project: `go get github.com/zegl/fuse`
+
 ---
 
 `bazil.org/fuse` is a Go library for writing FUSE userspace
