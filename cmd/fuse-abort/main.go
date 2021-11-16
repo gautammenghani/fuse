@@ -16,8 +16,8 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/zegl/fuse"
-	"github.com/zegl/fuse/cmd/fuse-abort/internal/mountinfo"
+	"github.com/anacrolix/fuse"
+	"github.com/anacrolix/fuse/cmd/fuse-abort/internal/mountinfo"
 )
 
 // When developing a FUSE filesystem, it's pretty common to end up

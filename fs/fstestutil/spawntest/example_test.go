@@ -7,8 +7,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/zegl/fuse/fs/fstestutil/spawntest"
-	"github.com/zegl/fuse/fs/fstestutil/spawntest/httpjson"
+	"github.com/anacrolix/fuse/fs/fstestutil/spawntest"
+	"github.com/anacrolix/fuse/fs/fstestutil/spawntest/httpjson"
 )
 
 var helpers spawntest.Registry

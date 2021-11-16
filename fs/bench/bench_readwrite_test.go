@@ -9,11 +9,11 @@ import (
 	"syscall"
 	"testing"
 
-	"github.com/zegl/fuse"
-	"github.com/zegl/fuse/fs"
-	"github.com/zegl/fuse/fs/fstestutil"
-	"github.com/zegl/fuse/fs/fstestutil/spawntest"
-	"github.com/zegl/fuse/fs/fstestutil/spawntest/httpjson"
+	"github.com/anacrolix/fuse"
+	"github.com/anacrolix/fuse/fs"
+	"github.com/anacrolix/fuse/fs/fstestutil"
+	"github.com/anacrolix/fuse/fs/fstestutil/spawntest"
+	"github.com/anacrolix/fuse/fs/fstestutil/spawntest/httpjson"
 )
 
 type benchConfig struct {

@@ -5,7 +5,7 @@ import (
 	"log"
 	"strconv"
 
-	"github.com/zegl/fuse"
+	"github.com/anacrolix/fuse"
 )
 
 type flagDebug bool

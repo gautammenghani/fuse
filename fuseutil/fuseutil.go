@@ -1,7 +1,7 @@
-package fuseutil // import "github.com/zegl/fuse/fuseutil"
+package fuseutil // import "github.com/anacrolix/fuse/fuseutil"
 
 import (
-	"github.com/zegl/fuse"
+	"github.com/anacrolix/fuse"
 )
 
 // HandleRead handles a read request assuming that data is the entire file content.

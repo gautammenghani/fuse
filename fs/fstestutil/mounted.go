@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/zegl/fuse"
-	"github.com/zegl/fuse/fs"
+	"github.com/anacrolix/fuse"
+	"github.com/anacrolix/fuse/fs"
 )
 
 // Mount contains information about the mount for the test to use.

@@ -1,1 +1,1 @@
-package fstestutil // import "github.com/zegl/fuse/fs/fstestutil"
+package fstestutil // import "github.com/anacrolix/fuse/fs/fstestutil"

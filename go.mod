@@ -1,4 +1,4 @@
-module github.com/zegl/fuse
+module github.com/anacrolix/fuse
 
 go 1.13
 

@@ -1,6 +1,6 @@
 // FUSE service loop, for servers that wish to use it.
 
-package fs // import "github.com/zegl/fuse/fs"
+package fs // import "github.com/anacrolix/fuse/fs"
 
 import (
 	"bytes"
@@ -18,8 +18,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/zegl/fuse"
-	"github.com/zegl/fuse/fuseutil"
+	"github.com/anacrolix/fuse"
+	"github.com/anacrolix/fuse/fuseutil"
 	"golang.org/x/sys/unix"
 )
 

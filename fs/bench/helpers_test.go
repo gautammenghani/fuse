@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/zegl/fuse/fs/fstestutil/spawntest"
+	"github.com/anacrolix/fuse/fs/fstestutil/spawntest"
 )
 
 var helpers spawntest.Registry

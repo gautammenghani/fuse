@@ -5,8 +5,8 @@ import (
 	"os"
 	"syscall"
 
-	"github.com/zegl/fuse"
-	"github.com/zegl/fuse/fs"
+	"github.com/anacrolix/fuse"
+	"github.com/anacrolix/fuse/fs"
 )
 
 // SimpleFS is a trivial FS that just implements the Root method.

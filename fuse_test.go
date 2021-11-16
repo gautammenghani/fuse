@@ -6,7 +6,7 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/zegl/fuse"
+	"github.com/anacrolix/fuse"
 )
 
 func getFeatures(t *testing.T, opts ...fuse.MountOption) fuse.InitFlags {

@@ -1,6 +1,7 @@
 // This file contains tests for platforms that have no escape
 // mechanism for including commas in mount options.
 //
+//go:build darwin
 // +build darwin
 
 package fuse_test
@@ -9,8 +10,8 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/zegl/fuse"
-	"github.com/zegl/fuse/fs/fstestutil"
+	"github.com/anacrolix/fuse"
+	"github.com/anacrolix/fuse/fs/fstestutil"
 )
 
 func TestMountOptionCommaError(t *testing.T) {

@@ -21,14 +21,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/zegl/fuse"
-	"github.com/zegl/fuse/fs"
-	"github.com/zegl/fuse/fs/fstestutil"
-	"github.com/zegl/fuse/fs/fstestutil/record"
-	"github.com/zegl/fuse/fs/fstestutil/spawntest"
-	"github.com/zegl/fuse/fs/fstestutil/spawntest/httpjson"
-	"github.com/zegl/fuse/fuseutil"
-	"github.com/zegl/fuse/syscallx"
+	"github.com/anacrolix/fuse"
+	"github.com/anacrolix/fuse/fs"
+	"github.com/anacrolix/fuse/fs/fstestutil"
+	"github.com/anacrolix/fuse/fs/fstestutil/record"
+	"github.com/anacrolix/fuse/fs/fstestutil/spawntest"
+	"github.com/anacrolix/fuse/fs/fstestutil/spawntest/httpjson"
+	"github.com/anacrolix/fuse/fuseutil"
+	"github.com/anacrolix/fuse/syscallx"
 )
 
 func maybeParallel(t *testing.T) {

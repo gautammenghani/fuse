@@ -5,8 +5,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/zegl/fuse"
-	"github.com/zegl/fuse/fs"
+	"github.com/anacrolix/fuse"
+	"github.com/anacrolix/fuse/fs"
 )
 
 // ReleaseWaiter notes whether a FUSE Release call has been seen.

@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/zegl/fuse"
+	"github.com/anacrolix/fuse"
 )
 
 func TestOpenFlagsAccmodeMaskReadWrite(t *testing.T) {

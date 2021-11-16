@@ -1,5 +1,6 @@
 // Test for adjustable timeout between a FUSE request and the daemon's response.
 //
+//go:build darwin
 // +build darwin
 
 package fuse_test
@@ -12,9 +13,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/zegl/fuse"
-	"github.com/zegl/fuse/fs"
-	"github.com/zegl/fuse/fs/fstestutil"
+	"github.com/anacrolix/fuse"
+	"github.com/anacrolix/fuse/fs"
+	"github.com/anacrolix/fuse/fs/fstestutil"
 )
 
 type slowCreaterDir struct {

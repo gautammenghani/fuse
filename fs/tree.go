@@ -9,7 +9,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/zegl/fuse"
+	"github.com/anacrolix/fuse"
 )
 
 // A Tree implements a basic read-only directory tree for FUSE.

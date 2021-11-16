@@ -1,4 +1,4 @@
-package record // import "github.com/zegl/fuse/fs/fstestutil/record"
+package record // import "github.com/anacrolix/fuse/fs/fstestutil/record"
 
 import (
 	"context"
@@ -6,8 +6,8 @@ import (
 	"sync/atomic"
 	"syscall"
 
-	"github.com/zegl/fuse"
-	"github.com/zegl/fuse/fs"
+	"github.com/anacrolix/fuse"
+	"github.com/anacrolix/fuse/fs"
 )
 
 // Writes gathers data from FUSE Write calls.
