@@ -28,7 +28,7 @@ import (
 	"sync"
 	"testing"
 
-	"bazil.org/fuse/fs/fstestutil/spawntest/httpjson"
+	"github.com/zegl/fuse/fs/fstestutil/spawntest/httpjson"
 	"github.com/tv42/httpunix"
 )
 

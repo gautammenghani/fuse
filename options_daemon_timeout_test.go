@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"bazil.org/fuse"
-	"bazil.org/fuse/fs"
-	"bazil.org/fuse/fs/fstestutil"
+	"github.com/zegl/fuse"
+	"github.com/zegl/fuse/fs"
+	"github.com/zegl/fuse/fs/fstestutil"
 )
 
 type slowCreaterDir struct {

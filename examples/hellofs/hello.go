@@ -9,9 +9,9 @@ import (
 	"os"
 	"syscall"
 
-	"bazil.org/fuse"
-	"bazil.org/fuse/fs"
-	_ "bazil.org/fuse/fs/fstestutil"
+	"github.com/zegl/fuse"
+	"github.com/zegl/fuse/fs"
+	_ "github.com/zegl/fuse/fs/fstestutil"
 )
 
 func usage() {

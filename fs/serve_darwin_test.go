@@ -8,8 +8,8 @@ import (
 	"syscall"
 	"testing"
 
-	"bazil.org/fuse/fs/fstestutil"
-	"bazil.org/fuse/fs/fstestutil/spawntest/httpjson"
+	"github.com/zegl/fuse/fs/fstestutil"
+	"github.com/zegl/fuse/fs/fstestutil/spawntest/httpjson"
 	"golang.org/x/sys/unix"
 )
 
