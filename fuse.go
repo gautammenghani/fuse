@@ -41,7 +41,7 @@
 //
 // The hellofs subdirectory contains a simple illustration of the fs.Serve approach.
 //
-// Service Methods
+// # Service Methods
 //
 // The required and optional methods for the FS, Node, and Handle interfaces
 // have the general form
@@ -60,7 +60,7 @@
 // including any []byte fields such as WriteRequest.Data or
 // SetxattrRequest.Xattr.
 //
-// Errors
+// # Errors
 //
 // Operations can return errors. The FUSE interface can only
 // communicate POSIX errno error numbers to file system clients, the
@@ -71,7 +71,7 @@
 // Error messages will be visible in the debug log as part of the
 // response.
 //
-// Interrupted Operations
+// # Interrupted Operations
 //
 // In some file systems, some operations
 // may take an undetermined amount of time.  For example, a Read waiting for
@@ -84,7 +84,7 @@
 // If an operation does not block for an indefinite amount of time, supporting
 // cancellation is not necessary.
 //
-// Authentication
+// # Authentication
 //
 // All requests types embed a Header, meaning that the method can
 // inspect req.Pid, req.Uid, and req.Gid as necessary to implement
@@ -93,11 +93,10 @@
 // AllowOther), but does not enforce access modes (to change this, see
 // DefaultPermissions).
 //
-// Mount Options
+// # Mount Options
 //
 // Behavior and metadata of the mounted file system can be changed by
 // passing MountOption values to Mount.
-//
 package fuse // import "github.com/anacrolix/fuse"
 
 import (
@@ -583,6 +582,38 @@ func (c *Conn) Features() InitFlags {
 	return c.flags
 }
 
+func readAll(fd int, dest []byte) (int, error) {
+	offset := 0
+
+	for offset < len(dest) {
+		// read the remaining buffer
+		n, err := syscall.Read(fd, dest[offset:])
+		if n == 0 && err == nil {
+			// remote fd closed
+			return n, err
+		}
+		offset += n
+		if err != nil {
+			return offset, err
+		}
+	}
+	return offset, nil
+}
+
+func (c *Conn) ReadSingle(buf []byte) (int, error) {
+	// read request length
+	if _, err := readAll(c.fd(), buf[0:4]); err != nil {
+		return 0, err
+	}
+
+	l := *(*uint32)(unsafe.Pointer(&buf[0]))
+	// read remaining request
+	if n, err := readAll(c.fd(), buf[4:l]); err != nil {
+		return n, err
+	}
+	return int(l), nil
+}
+
 // ReadRequest returns the next FUSE request from the kernel.
 //
 // Caller must call either Request.Respond or Request.RespondError in
@@ -590,9 +621,15 @@ func (c *Conn) Features() InitFlags {
 func (c *Conn) ReadRequest() (Request, error) {
 	m := getMessage(c)
 loop:
-	c.rio.RLock()
-	n, err := syscall.Read(c.fd(), m.buf)
-	c.rio.RUnlock()
+	c.rio.Lock()
+	var n int
+	var err error
+	if !osxFuse {
+		n, err = c.ReadSingle(m.buf)
+	} else {
+		n, err = syscall.Read(c.fd(), m.buf)
+	}
+	c.rio.Unlock()
 	if err == syscall.EINTR {
 		// OSXFUSE sends EINTR to userspace when a request interrupt
 		// completed before it got sent to userspace?
@@ -1224,8 +1261,8 @@ func (c *Conn) writeToKernel(msg []byte) error {
 	out := (*outHeader)(unsafe.Pointer(&msg[0]))
 	out.Len = uint32(len(msg))
 
-	c.wio.RLock()
-	defer c.wio.RUnlock()
+	c.wio.Lock()
+	defer c.wio.Unlock()
 	nn, err := syscall.Write(c.fd(), msg)
 	if err == nil && nn != len(msg) {
 		Debug(bugShortKernelWrite{
@@ -2660,12 +2697,12 @@ type FileLock struct {
 //
 // Unlocking can be
 //
-//     - explicit with UnlockRequest
-//     - for flock: implicit on final close (ReleaseRequest.ReleaseFlags
-//       has ReleaseFlockUnlock set)
-//     - for POSIX locks: implicit on any close (FlushRequest)
-//     - for Open File Description locks: implicit on final close
-//       (no LockOwner observed as of 2020-04)
+//   - explicit with UnlockRequest
+//   - for flock: implicit on final close (ReleaseRequest.ReleaseFlags
+//     has ReleaseFlockUnlock set)
+//   - for POSIX locks: implicit on any close (FlushRequest)
+//   - for Open File Description locks: implicit on final close
+//     (no LockOwner observed as of 2020-04)
 //
 // See LockFlags to know which kind of a lock is being requested. (As
 // of 2020-04, Open File Descriptor locks are indistinguishable from

@@ -10,7 +10,103 @@ import (
 	"unsafe"
 )
 
+const FUSET_SRV_PATH = "/usr/local/bin/go-nfsv4"
+
+var osxFuse bool
+
+func fusetBinary() (string, error) {
+	srv_path := os.Getenv("FUSE_NFSSRV_PATH")
+	if srv_path == "" {
+		srv_path = FUSET_SRV_PATH
+	}
+
+	if _, err := os.Stat(srv_path); err == nil {
+		return srv_path, nil
+	}
+
+	return "", fmt.Errorf("FUSE-T not found")
+}
+
+var remote_file, local_file, remote_mon_file, local_mon_file *os.File
+
+func mount_fuset(bin string, mountPoint string, conf *mountConfig, ready chan<- struct{}, errp *error) (*os.File, error) {
+	fds, err := syscall.Socketpair(syscall.AF_UNIX, syscall.SOCK_STREAM, 0)
+	if err != nil {
+		return nil, err
+	}
+	local := fds[0]
+	remote := fds[1]
+
+	defer syscall.Close(remote)
+
+	fds, err = syscall.Socketpair(syscall.AF_UNIX, syscall.SOCK_STREAM, 0)
+	if err != nil {
+		return nil, err
+	}
+
+	local_mon := fds[0]
+	remote_mon := fds[1]
+
+	defer syscall.Close(remote_mon)
+
+	args := []string{}
+	// TODO: apply args: -ro, -volname, ...
+
+	remote_file = os.NewFile(uintptr(remote), "")
+	remote_mon_file = os.NewFile(uintptr(remote_mon), "")
+	local_file = os.NewFile(uintptr(local), "")
+	local_mon_file = os.NewFile(uintptr(local_mon), "")
+
+	args = append(args, fmt.Sprintf("--rwsize=%d", maxWrite))
+	args = append(args, mountPoint)
+	cmd := exec.Command(bin, args...)
+	cmd.ExtraFiles = []*os.File{remote_file, remote_mon_file} // fd would be (index + 3)
+	cmd.Stderr = nil
+	cmd.Stdout = nil
+	// daemonize
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		Setsid: true,
+	}
+
+	envs := []string{}
+	envs = append(envs, "_FUSE_COMMFD=3")
+	envs = append(envs, "_FUSE_MONFD=4")
+	envs = append(envs, "_FUSE_COMMVERS=2")
+	cmd.Env = append(os.Environ(), envs...)
+
+	syscall.CloseOnExec(local)
+	syscall.CloseOnExec(local_mon)
+
+	if err = cmd.Start(); err != nil {
+		return nil, err
+	}
+
+	cmd.Process.Release()
+	go func() {
+
+		if _, err = local_mon_file.Write([]byte("mount")); err != nil {
+			err = fmt.Errorf("fuse-t failed: %v", err)
+		} else {
+			reply := make([]byte, 4)
+			if _, err = local_mon_file.Read(reply); err != nil {
+				err = fmt.Errorf("fuse-t failed: %v", err)
+			}
+		}
+
+		*errp = err
+		close(ready)
+	}()
+
+	return local_file, err
+}
+
 func mount(mountPoint string, conf *mountConfig, ready chan<- struct{}, errp *error) (*os.File, error) {
+
+	if fuset_bin, err := fusetBinary(); err == nil {
+		osxFuse = false
+		return mount_fuset(fuset_bin, mountPoint, conf, ready, errp)
+	}
+
 	locations := conf.osxfuseLocations
 	if locations == nil {
 		locations = []OSXFUSEPaths{
@@ -112,7 +208,7 @@ func getConnection(local *os.File) (*os.File, error) {
 
 	// n, oobn, recvflags, from, errno  - todo: error checking.
 	_, oobn, _, _,
-	err := syscall.Recvmsg(
+		err := syscall.Recvmsg(
 		int(local.Fd()), data[:], control[:], 0)
 	if err != nil {
 		return nil, err

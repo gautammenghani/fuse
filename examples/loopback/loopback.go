@@ -1,0 +1,758 @@
+// Copyright 2017 Keybase Inc. All rights reserved.
+// Use of this source code is governed by a BSD
+// license that can be found in the LICENSE file.
+
+//go:build linux || darwin
+// +build linux darwin
+
+package main
+
+import (
+	"fmt"
+	"io/ioutil"
+	"log"
+	"os"
+	"path/filepath"
+	"sort"
+	"sync"
+	"syscall"
+	"time"
+
+	"github.com/anacrolix/fuse"
+	"github.com/anacrolix/fuse/fs"
+	"golang.org/x/net/context"
+)
+
+const (
+	attrValidDuration = time.Second
+)
+
+func translateError(err error) error {
+	switch {
+	case os.IsNotExist(err):
+		return fuse.ENOENT
+	case os.IsExist(err):
+		return fuse.EEXIST
+	case os.IsPermission(err):
+		return fuse.EPERM
+	default:
+		return err
+	}
+}
+
+// FS is the filesystem root
+type FS struct {
+	rootPath string
+
+	xlock  sync.RWMutex
+	xattrs map[string]map[string][]byte
+
+	nlock sync.Mutex
+	nodes map[string][]*Node // realPath -> nodes
+}
+
+func newFS(rootPath string) *FS {
+	return &FS{
+		rootPath: rootPath,
+		xattrs:   make(map[string]map[string][]byte),
+		nodes:    make(map[string][]*Node),
+	}
+}
+
+func (f *FS) newNode(n *Node) {
+	rp := n.getRealPath()
+
+	f.nlock.Lock()
+	defer f.nlock.Unlock()
+	f.nodes[rp] = append(f.nodes[rp], n)
+}
+
+func (f *FS) nodeRenamed(oldPath string, newPath string) {
+	f.nlock.Lock()
+	defer f.nlock.Unlock()
+	f.nodes[newPath] = append(f.nodes[newPath], f.nodes[oldPath]...)
+	delete(f.nodes, oldPath)
+	for _, n := range f.nodes[newPath] {
+		n.updateRealPath(newPath)
+	}
+}
+
+func (f *FS) forgetNode(n *Node) {
+	f.nlock.Lock()
+	defer f.nlock.Unlock()
+	nodes, ok := f.nodes[n.realPath]
+	if !ok {
+		return
+	}
+
+	found := -1
+	for i, node := range nodes {
+		if node == n {
+			found = i
+			break
+		}
+	}
+
+	if found > -1 {
+		nodes = append(nodes[:found], nodes[found+1:]...)
+	}
+	if len(nodes) == 0 {
+		delete(f.nodes, n.realPath)
+	} else {
+		f.nodes[n.realPath] = nodes
+	}
+}
+
+// Root implements fs.FS interface for *FS
+func (f *FS) Root() (n fs.Node, err error) {
+	time.Sleep(latency)
+	defer func() { log.Printf("FS.Root(): %#+v error=%v", n, err) }()
+	nn := &Node{realPath: f.rootPath, isDir: true, fs: f}
+	f.newNode(nn)
+	return nn, nil
+}
+
+var _ fs.FSStatfser = (*FS)(nil)
+
+// Statfs implements fs.FSStatfser interface for *FS
+func (f *FS) Statfs(ctx context.Context,
+	req *fuse.StatfsRequest, resp *fuse.StatfsResponse) (err error) {
+	time.Sleep(latency)
+	defer func() { log.Printf("FS.Statfs(): error=%v", err) }()
+	var stat syscall.Statfs_t
+	if err := syscall.Statfs(f.rootPath, &stat); err != nil {
+		return translateError(err)
+	}
+	resp.Blocks = stat.Blocks
+	resp.Bfree = stat.Bfree
+	resp.Bavail = stat.Bavail
+	resp.Files = 0 // TODO
+	resp.Ffree = stat.Ffree
+	resp.Bsize = uint32(stat.Bsize)
+	resp.Namelen = 255 // TODO
+	resp.Frsize = 8    // TODO
+
+	return nil
+}
+
+// if to is empty, all xattrs on the node is removed
+func (f *FS) moveAllxattrs(ctx context.Context, from string, to string) {
+	f.xlock.Lock()
+	defer f.xlock.Unlock()
+	if f.xattrs[from] != nil {
+		if to != "" {
+			f.xattrs[to] = f.xattrs[from]
+		}
+		f.xattrs[from] = nil
+	}
+}
+
+// Handle represent an open file or directory
+type Handle struct {
+	fs        *FS
+	reopener  func() (*os.File, error)
+	forgetter func()
+
+	f *os.File
+}
+
+var _ fs.HandleFlusher = (*Handle)(nil)
+
+// Flush implements fs.HandleFlusher interface for *Handle
+func (h *Handle) Flush(ctx context.Context,
+	req *fuse.FlushRequest) (err error) {
+	time.Sleep(latency)
+	defer func() { log.Printf("Handle(%s).Flush(): error=%v", h.f.Name(), err) }()
+	return h.f.Sync()
+}
+
+var _ fs.HandleReadAller = (*Handle)(nil)
+
+// ReadAll implements fs.HandleReadAller interface for *Handle
+func (h *Handle) ReadAll(ctx context.Context) (d []byte, err error) {
+	time.Sleep(latency)
+	defer func() {
+		log.Printf("Handle(%s).ReadAll(): error=%v",
+			h.f.Name(), err)
+	}()
+	return ioutil.ReadAll(h.f)
+}
+
+var _ fs.HandleReadDirAller = (*Handle)(nil)
+
+// ReadDirAll implements fs.HandleReadDirAller interface for *Handle
+func (h *Handle) ReadDirAll(ctx context.Context) (
+	dirs []fuse.Dirent, err error) {
+	time.Sleep(latency)
+	defer func() {
+		log.Printf("Handle(%s).ReadDirAll(): %#+v error=%v",
+			h.f.Name(), dirs, err)
+	}()
+	fis, err := h.f.Readdir(0)
+	if err != nil {
+		fmt.Printf("ReadDir error: %v", err)
+		return nil, translateError(err)
+	}
+	log.Printf("dirent: %v", fis)
+
+	// Readdir() reads up the entire dir stream but never resets the pointer.
+	// Consequently, when Readdir is called again on the same *File, it gets
+	// nothing. As a result, we need to close the file descriptor and re-open it
+	// so next call would work.
+	if err = h.f.Close(); err != nil {
+		return nil, translateError(err)
+	}
+	if h.f, err = h.reopener(); err != nil {
+		return nil, translateError(err)
+	}
+
+	return getDirentsWithFileInfos(fis), nil
+}
+
+var _ fs.HandleReader = (*Handle)(nil)
+
+// Read implements fs.HandleReader interface for *Handle
+func (h *Handle) Read(ctx context.Context,
+	req *fuse.ReadRequest, resp *fuse.ReadResponse) (err error) {
+	time.Sleep(latency)
+	defer func() {
+		log.Printf("Handle(%s).Read(): error=%v",
+			h.f.Name(), err)
+	}()
+
+	if _, err = h.f.Seek(req.Offset, 0); err != nil {
+		return translateError(err)
+	}
+	resp.Data = make([]byte, req.Size)
+	n, err := h.f.Read(resp.Data)
+	resp.Data = resp.Data[:n]
+	return translateError(err)
+}
+
+var _ fs.HandleReleaser = (*Handle)(nil)
+
+// Release implements fs.HandleReleaser interface for *Handle
+func (h *Handle) Release(ctx context.Context,
+	req *fuse.ReleaseRequest) (err error) {
+	time.Sleep(latency)
+	defer func() {
+		log.Printf("Handle(%s).Release(): error=%v",
+			h.f.Name(), err)
+	}()
+	if h.forgetter != nil {
+		h.forgetter()
+	}
+	return h.f.Close()
+}
+
+var _ fs.HandleWriter = (*Handle)(nil)
+
+// Write implements fs.HandleWriter interface for *Handle
+func (h *Handle) Write(ctx context.Context,
+	req *fuse.WriteRequest, resp *fuse.WriteResponse) (err error) {
+	time.Sleep(latency)
+	defer func() {
+		log.Printf("Handle(%s).Write(): error=%v",
+			h.f.Name(), err)
+	}()
+
+	if _, err = h.f.Seek(req.Offset, 0); err != nil {
+		return translateError(err)
+	}
+	n, err := h.f.Write(req.Data)
+	resp.Size = n
+	return translateError(err)
+}
+
+// Node is the node for both directories and files
+type Node struct {
+	fs *FS
+
+	rpLock   sync.RWMutex
+	realPath string
+
+	isDir bool
+
+	lock     sync.RWMutex
+	flushers map[*Handle]bool
+}
+
+func (n *Node) getRealPath() string {
+	n.rpLock.RLock()
+	defer n.rpLock.RUnlock()
+	return n.realPath
+}
+
+func (n *Node) updateRealPath(realPath string) {
+	n.rpLock.Lock()
+	defer n.rpLock.Unlock()
+	n.realPath = realPath
+}
+
+var _ fs.NodeAccesser = (*Node)(nil)
+
+// Access implements fs.NodeAccesser interface for *Node
+func (n *Node) Access(ctx context.Context, a *fuse.AccessRequest) (err error) {
+	time.Sleep(latency)
+	defer func() {
+		log.Printf("%s.Access(%o): error=%v", n.getRealPath(), a.Mask, err)
+	}()
+	fi, err := os.Stat(n.getRealPath())
+	if err != nil {
+		return translateError(err)
+	}
+	if a.Mask&uint32(fi.Mode()>>6) != a.Mask {
+		return fuse.EPERM
+	}
+	return nil
+}
+
+// Attr implements fs.Node interface for *Dir
+func (n *Node) Attr(ctx context.Context, a *fuse.Attr) (err error) {
+	time.Sleep(latency)
+	defer func() { log.Printf("%s.Attr(): %#+v error=%v", n.getRealPath(), a, err) }()
+	fi, err := os.Stat(n.getRealPath())
+	if err != nil {
+		return translateError(err)
+	}
+
+	fillAttrWithFileInfo(a, fi)
+
+	return nil
+}
+
+// Lookup implements fs.NodeRequestLookuper interface for *Node
+func (n *Node) Lookup(ctx context.Context,
+	name string) (ret fs.Node, err error) {
+	time.Sleep(latency)
+	defer func() {
+		log.Printf("%s.Lookup(%s): %#+v error=%v",
+			n.getRealPath(), name, ret, err)
+	}()
+
+	if !n.isDir {
+		return nil, fuse.ENOTSUP
+	}
+
+	p := filepath.Join(n.getRealPath(), name)
+	fi, err := os.Stat(p)
+
+	err = translateError(err)
+	if err != nil {
+		return nil, translateError(err)
+	}
+
+	var nn *Node
+	if fi.IsDir() {
+		nn = &Node{realPath: p, isDir: true, fs: n.fs}
+	} else {
+		nn = &Node{realPath: p, isDir: false, fs: n.fs}
+	}
+
+	n.fs.newNode(nn)
+	return nn, nil
+}
+
+func getDirentsWithFileInfos(fis []os.FileInfo) (dirs []fuse.Dirent) {
+	for _, fi := range fis {
+		stat := fi.Sys().(*syscall.Stat_t)
+		var tp fuse.DirentType
+
+		switch {
+		case fi.IsDir():
+			tp = fuse.DT_Dir
+		case fi.Mode().IsRegular():
+			tp = fuse.DT_File
+		default:
+			fmt.Printf("type %v\n", fi.Mode())
+			//panic("unsupported dirent type")
+			continue
+		}
+
+		dirs = append(dirs, fuse.Dirent{
+			Inode: stat.Ino,
+			Name:  fi.Name(),
+			Type:  tp,
+		})
+	}
+
+	return dirs
+}
+
+func fuseOpenFlagsToOSFlagsAndPerms(
+	f fuse.OpenFlags) (flag int, perm os.FileMode) {
+	flag = int(f & fuse.OpenAccessModeMask)
+	if f&fuse.OpenAppend != 0 {
+		perm |= os.ModeAppend
+	}
+	if f&fuse.OpenCreate != 0 {
+		flag |= os.O_CREATE
+	}
+	if f&fuse.OpenDirectory != 0 {
+		perm |= os.ModeDir
+	}
+	if f&fuse.OpenExclusive != 0 {
+		perm |= os.ModeExclusive
+	}
+	if f&fuse.OpenNonblock != 0 {
+		log.Printf("fuse.OpenNonblock is set in OpenFlags but ignored")
+	}
+	if f&fuse.OpenSync != 0 {
+		flag |= os.O_SYNC
+	}
+	if f&fuse.OpenTruncate != 0 {
+		flag |= os.O_TRUNC
+	}
+
+	return flag, perm
+}
+
+func (n *Node) rememberHandle(h *Handle) {
+	n.lock.Lock()
+	defer n.lock.Unlock()
+	if n.flushers == nil {
+		n.flushers = make(map[*Handle]bool)
+	}
+	n.flushers[h] = true
+}
+
+func (n *Node) forgetHandle(h *Handle) {
+	n.lock.Lock()
+	defer n.lock.Unlock()
+	if n.flushers == nil {
+		return
+	}
+	delete(n.flushers, h)
+}
+
+var _ fs.NodeOpener = (*Node)(nil)
+
+// Open implements fs.NodeOpener interface for *Node
+func (n *Node) Open(ctx context.Context,
+	req *fuse.OpenRequest, resp *fuse.OpenResponse) (h fs.Handle, err error) {
+	time.Sleep(latency)
+	flags, perm := fuseOpenFlagsToOSFlagsAndPerms(req.Flags)
+	defer func() {
+		log.Printf("%s.Open(): %o %o error=%v",
+			n.getRealPath(), flags, perm, err)
+	}()
+
+	opener := func() (*os.File, error) {
+		return os.OpenFile(n.getRealPath(), flags, perm)
+	}
+
+	f, err := opener()
+	if err != nil {
+		return nil, translateError(err)
+	}
+
+	handle := &Handle{fs: n.fs, f: f, reopener: opener}
+	n.rememberHandle(handle)
+	handle.forgetter = func() {
+		n.forgetHandle(handle)
+	}
+	return handle, nil
+}
+
+var _ fs.NodeCreater = (*Node)(nil)
+
+// Create implements fs.NodeCreater interface for *Node
+func (n *Node) Create(
+	ctx context.Context, req *fuse.CreateRequest, resp *fuse.CreateResponse) (
+	fsn fs.Node, fsh fs.Handle, err error) {
+	time.Sleep(latency)
+	flags, _ := fuseOpenFlagsToOSFlagsAndPerms(req.Flags)
+	name := filepath.Join(n.getRealPath(), req.Name)
+	defer func() {
+		log.Printf("%s.Create(%s): %o %o error=%v",
+			n.getRealPath(), name, flags, req.Mode, err)
+	}()
+
+	opener := func() (f *os.File, err error) {
+		return os.OpenFile(name, flags, req.Mode)
+	}
+
+	f, err := opener()
+	if err != nil {
+		return nil, nil, translateError(err)
+	}
+
+	h := &Handle{fs: n.fs, f: f, reopener: opener}
+
+	node := &Node{
+		realPath: filepath.Join(n.getRealPath(), req.Name),
+		isDir:    req.Mode.IsDir(),
+		fs:       n.fs,
+	}
+	node.rememberHandle(h)
+	h.forgetter = func() {
+		node.forgetHandle(h)
+	}
+	n.fs.newNode(node)
+	return node, h, nil
+}
+
+var _ fs.NodeMkdirer = (*Node)(nil)
+
+// Mkdir implements fs.NodeMkdirer interface for *Node
+func (n *Node) Mkdir(ctx context.Context,
+	req *fuse.MkdirRequest) (created fs.Node, err error) {
+	time.Sleep(latency)
+	defer func() { log.Printf("%s.Mkdir(%s): error=%v", n.getRealPath(), req.Name, err) }()
+	name := filepath.Join(n.getRealPath(), req.Name)
+	if err = os.Mkdir(name, req.Mode); err != nil {
+		return nil, translateError(err)
+	}
+	nn := &Node{realPath: name, isDir: true, fs: n.fs}
+	n.fs.newNode(nn)
+	return nn, nil
+}
+
+var _ fs.NodeRemover = (*Node)(nil)
+
+// Remove implements fs.NodeRemover interface for *Node
+func (n *Node) Remove(ctx context.Context, req *fuse.RemoveRequest) (err error) {
+	time.Sleep(latency)
+	name := filepath.Join(n.getRealPath(), req.Name)
+	defer func() { log.Printf("%s.Remove(%s): error=%v", n.getRealPath(), name, err) }()
+	defer func() {
+		if err == nil {
+			n.fs.moveAllxattrs(ctx, name, "")
+		}
+	}()
+	return os.Remove(name)
+}
+
+var _ fs.NodeFsyncer = (*Node)(nil)
+
+// Fsync implements fs.NodeFsyncer interface for *Node
+func (n *Node) Fsync(ctx context.Context, req *fuse.FsyncRequest) (err error) {
+	time.Sleep(latency)
+	defer func() { log.Printf("%s.Fsync(): error=%v", n.getRealPath(), err) }()
+	n.lock.RLock()
+	defer n.lock.RUnlock()
+	for h := range n.flushers {
+		return h.f.Sync()
+	}
+	return fuse.EIO
+}
+
+var _ fs.NodeSetattrer = (*Node)(nil)
+
+// Setattr implements fs.NodeSetattrer interface for *Node
+func (n *Node) Setattr(ctx context.Context,
+	req *fuse.SetattrRequest, resp *fuse.SetattrResponse) (err error) {
+	time.Sleep(latency)
+	defer func() {
+		log.Printf("%s.Setattr(valid=%x): error=%v", n.getRealPath(), req.Valid, err)
+	}()
+	if req.Valid.Size() {
+		if err = syscall.Truncate(n.getRealPath(), int64(req.Size)); err != nil {
+			return translateError(err)
+		}
+	}
+
+	if req.Valid.Mtime() {
+		var tvs [2]syscall.Timeval
+		if !req.Valid.Atime() {
+			tvs[0] = tToTv(time.Now())
+		} else {
+			tvs[0] = tToTv(req.Atime)
+		}
+		tvs[1] = tToTv(req.Mtime)
+	}
+
+	if req.Valid.Handle() {
+		log.Printf("%s.Setattr(): unhandled request: req.Valid.Handle() == true",
+			n.getRealPath())
+	}
+
+	if req.Valid.Mode() {
+		if err = os.Chmod(n.getRealPath(), req.Mode); err != nil {
+			return translateError(err)
+		}
+	}
+
+	if req.Valid.Uid() || req.Valid.Gid() {
+		if req.Valid.Uid() && req.Valid.Gid() {
+			if err = os.Chown(n.getRealPath(), int(req.Uid), int(req.Gid)); err != nil {
+				return translateError(err)
+			}
+		}
+		fi, err := os.Stat(n.getRealPath())
+		if err != nil {
+			return translateError(err)
+		}
+		s := fi.Sys().(*syscall.Stat_t)
+		if req.Valid.Uid() {
+			if err = os.Chown(n.getRealPath(), int(req.Uid), int(s.Gid)); err != nil {
+				return translateError(err)
+			}
+		} else {
+			if err = os.Chown(n.getRealPath(), int(s.Uid), int(req.Gid)); err != nil {
+				return translateError(err)
+			}
+		}
+	}
+
+	if err = n.setattrPlatformSpecific(ctx, req, resp); err != nil {
+		return translateError(err)
+	}
+
+	fi, err := os.Stat(n.getRealPath())
+	if err != nil {
+		return translateError(err)
+	}
+
+	fillAttrWithFileInfo(&resp.Attr, fi)
+
+	return nil
+}
+
+var _ fs.NodeRenamer = (*Node)(nil)
+
+// Rename implements fs.NodeRenamer interface for *Node
+func (n *Node) Rename(ctx context.Context,
+	req *fuse.RenameRequest, newDir fs.Node) (err error) {
+	time.Sleep(latency)
+	np := filepath.Join(newDir.(*Node).getRealPath(), req.NewName)
+	op := filepath.Join(n.getRealPath(), req.OldName)
+	defer func() {
+		log.Printf("%s.Rename(%s->%s): error=%v",
+			n.getRealPath(), op, np, err)
+	}()
+	defer func() {
+		if err == nil {
+			n.fs.moveAllxattrs(ctx, op, np)
+			n.fs.nodeRenamed(op, np)
+		}
+	}()
+	return os.Rename(op, np)
+}
+
+var _ fs.NodeGetxattrer = (*Node)(nil)
+
+// Getxattr implements fs.Getxattrer interface for *Node
+func (n *Node) Getxattr(ctx context.Context,
+	req *fuse.GetxattrRequest, resp *fuse.GetxattrResponse) (err error) {
+	time.Sleep(latency)
+	if !inMemoryXattr {
+		return fuse.ENOTSUP
+	}
+
+	defer func() {
+		log.Printf("%s.Getxattr(%s): error=%v", n.getRealPath(), req.Name, err)
+	}()
+	n.fs.xlock.RLock()
+	defer n.fs.xlock.RUnlock()
+	if x := n.fs.xattrs[n.getRealPath()]; x != nil {
+
+		var ok bool
+		resp.Xattr, ok = x[req.Name]
+		if ok {
+			return nil
+		}
+	}
+	return fuse.ENOATTR
+}
+
+var _ fs.NodeListxattrer = (*Node)(nil)
+
+// Listxattr implements fs.Listxattrer interface for *Node
+func (n *Node) Listxattr(ctx context.Context,
+	req *fuse.ListxattrRequest, resp *fuse.ListxattrResponse) (err error) {
+	time.Sleep(latency)
+	if !inMemoryXattr {
+		return fuse.ENOTSUP
+	}
+
+	defer func() {
+		log.Printf("%s.Listxattr(%d,%d): error=%v",
+			n.getRealPath(), req.Position, req.Size, err)
+	}()
+	n.fs.xlock.RLock()
+	defer n.fs.xlock.RUnlock()
+	if x := n.fs.xattrs[n.getRealPath()]; x != nil {
+		names := make([]string, 0)
+		for k := range x {
+			names = append(names, k)
+		}
+		sort.Strings(names)
+
+		if int(req.Position) >= len(names) {
+			return nil
+		}
+		names = names[int(req.Position):]
+
+		s := int(req.Size)
+		if s == 0 || s > len(names) {
+			s = len(names)
+		}
+		if s > 0 {
+			resp.Append(names[:s]...)
+		}
+	}
+
+	return nil
+}
+
+var _ fs.NodeSetxattrer = (*Node)(nil)
+
+// Setxattr implements fs.Setxattrer interface for *Node
+func (n *Node) Setxattr(ctx context.Context,
+	req *fuse.SetxattrRequest) (err error) {
+	time.Sleep(latency)
+	if !inMemoryXattr {
+		return fuse.ENOTSUP
+	}
+
+	defer func() {
+		log.Printf("%s.Setxattr(%s): error=%v", n.getRealPath(), req.Name, err)
+	}()
+	n.fs.xlock.Lock()
+	defer n.fs.xlock.Unlock()
+	if n.fs.xattrs[n.getRealPath()] == nil {
+		n.fs.xattrs[n.getRealPath()] = make(map[string][]byte)
+	}
+	buf := make([]byte, len(req.Xattr))
+	copy(buf, req.Xattr)
+
+	n.fs.xattrs[n.getRealPath()][req.Name] = buf
+	return nil
+}
+
+var _ fs.NodeRemovexattrer = (*Node)(nil)
+
+// Removexattr implements fs.Removexattrer interface for *Node
+func (n *Node) Removexattr(ctx context.Context,
+	req *fuse.RemovexattrRequest) (err error) {
+	time.Sleep(latency)
+	if !inMemoryXattr {
+		return fuse.ENOTSUP
+	}
+
+	defer func() {
+		log.Printf("%s.Removexattr(%s): error=%v", n.getRealPath(), req.Name, err)
+	}()
+	n.fs.xlock.Lock()
+	defer n.fs.xlock.Unlock()
+
+	name := req.Name
+
+	if x := n.fs.xattrs[n.getRealPath()]; x != nil {
+		var ok bool
+		_, ok = x[name]
+		if ok {
+			delete(x, name)
+			return nil
+		}
+	}
+	return fuse.ENOATTR
+}
+
+var _ fs.NodeForgetter = (*Node)(nil)
+
+// Forget implements fs.NodeForgetter interface for *Node
+func (n *Node) Forget() {
+	n.fs.forgetNode(n)
+}
