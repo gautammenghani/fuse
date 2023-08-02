@@ -28,7 +28,6 @@ import (
 	"github.com/anacrolix/fuse/fs/fstestutil/spawntest"
 	"github.com/anacrolix/fuse/fs/fstestutil/spawntest/httpjson"
 	"github.com/anacrolix/fuse/fuseutil"
-	"github.com/anacrolix/fuse/syscallx"
 )
 
 func maybeParallel(t *testing.T) {
@@ -2447,7 +2446,7 @@ type getxattrResult struct {
 
 func doGetxattr(ctx context.Context, req getxattrRequest) (*getxattrResult, error) {
 	buf := make([]byte, req.Size)
-	n, err := syscallx.Getxattr(req.Path, req.Name, buf)
+	n, err := unix.Getxattr(req.Path, req.Name, buf)
 	if req.WantErrno != 0 {
 		if !errors.Is(err, req.WantErrno) {
 			return nil, fmt.Errorf("wrong error: %v", err)
@@ -2604,7 +2603,7 @@ type listxattrResult struct {
 
 func doListxattr(ctx context.Context, req listxattrRequest) (*listxattrResult, error) {
 	buf := make([]byte, req.Size)
-	n, err := syscallx.Listxattr(req.Path, buf)
+	n, err := unix.Listxattr(req.Path, buf)
 	if req.WantErrno != 0 {
 		if !errors.Is(err, req.WantErrno) {
 			return nil, fmt.Errorf("wrong error: %v", err)
@@ -2783,7 +2782,7 @@ type setxattrRequest struct {
 }
 
 func doSetxattr(ctx context.Context, req setxattrRequest) (*struct{}, error) {
-	if err := syscallx.Setxattr(req.Path, req.Name, req.Data, req.Flags); err != nil {
+	if err := unix.Setxattr(req.Path, req.Name, req.Data, req.Flags); err != nil {
 		return nil, err
 	}
 	return &struct{}{}, nil
@@ -2863,7 +2862,7 @@ type removexattrRequest struct {
 }
 
 func doRemovexattr(ctx context.Context, req removexattrRequest) (*struct{}, error) {
-	if err := syscallx.Removexattr(req.Path, req.Name); err != nil {
+	if err := unix.Removexattr(req.Path, req.Name); err != nil {
 		return nil, err
 	}
 	return &struct{}{}, nil
@@ -3083,7 +3082,7 @@ func doMmap(ctx context.Context, dir string) (*struct{}, error) {
 	for i, b := range mmapWrites {
 		data[i] = b
 	}
-	if err := syscallx.Msync(data, syscall.MS_SYNC); err != nil {
+	if err := unix.Msync(data, syscall.MS_SYNC); err != nil {
 		return nil, fmt.Errorf("Msync: %v", err)
 	}
 	if err := syscall.Munmap(data); err != nil {
