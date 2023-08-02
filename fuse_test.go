@@ -60,7 +60,7 @@ func TestFeatures(t *testing.T) {
 		})
 	}
 
-	run("bare", 0, fuse.InitPOSIXLocks|fuse.InitFlockLocks)
+	run("Bare", 0, fuse.InitPOSIXLocks|fuse.InitFlockLocks)
 	run("LockingFlock", fuse.InitFlockLocks, 0, fuse.LockingFlock())
 	run("LockingPOSIX", fuse.InitPOSIXLocks, 0, fuse.LockingPOSIX())
 	run("AsyncRead", fuse.InitAsyncRead, 0, fuse.AsyncRead())
