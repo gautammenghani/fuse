@@ -12,7 +12,7 @@ import (
 	"syscall"
 	"time"
 
-	"bazil.org/fuse"
+	"github.com/anacrolix/fuse"
 )
 
 func fillAttrWithFileInfo(a *fuse.Attr, fi os.FileInfo) {

@@ -5,7 +5,7 @@ import (
 	"io"
 	"os"
 
-	"bazil.org/fuse"
+	"github.com/anacrolix/fuse"
 )
 
 var sink io.WriteCloser

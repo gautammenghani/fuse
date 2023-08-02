@@ -18,9 +18,9 @@ import (
 	"syscall"
 	"time"
 
+	"context"
 	"github.com/anacrolix/fuse"
 	"github.com/anacrolix/fuse/fs"
-	"golang.org/x/net/context"
 )
 
 const (
