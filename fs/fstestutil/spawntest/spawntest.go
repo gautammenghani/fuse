@@ -28,8 +28,9 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/anacrolix/fuse/fs/fstestutil/spawntest/httpjson"
 	"github.com/tv42/httpunix"
+
+	"github.com/anacrolix/fuse/fs/fstestutil/spawntest/httpjson"
 )
 
 // Registry keeps track of helpers.

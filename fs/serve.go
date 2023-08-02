@@ -18,9 +18,10 @@ import (
 	"syscall"
 	"time"
 
+	"golang.org/x/sys/unix"
+
 	"github.com/anacrolix/fuse"
 	"github.com/anacrolix/fuse/fuseutil"
-	"golang.org/x/sys/unix"
 )
 
 const (

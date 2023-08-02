@@ -8,9 +8,10 @@ import (
 	"syscall"
 	"testing"
 
+	"golang.org/x/sys/unix"
+
 	"github.com/anacrolix/fuse/fs/fstestutil"
 	"github.com/anacrolix/fuse/fs/fstestutil/spawntest/httpjson"
-	"golang.org/x/sys/unix"
 )
 
 func platformStatfs(st *syscall.Statfs_t) *statfsResult {

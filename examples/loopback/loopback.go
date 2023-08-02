@@ -8,6 +8,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -18,7 +19,6 @@ import (
 	"syscall"
 	"time"
 
-	"context"
 	"github.com/anacrolix/fuse"
 	"github.com/anacrolix/fuse/fs"
 )
