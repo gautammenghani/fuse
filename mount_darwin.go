@@ -12,7 +12,7 @@ import (
 
 const FUSET_SRV_PATH = "/usr/local/bin/go-nfsv4"
 
-var osxFuse bool
+var osxFuse = true
 
 func fusetBinary() (string, error) {
 	srv_path := os.Getenv("FUSE_NFSSRV_PATH")
