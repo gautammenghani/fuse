@@ -20,6 +20,12 @@ func getFeatures(t *testing.T, opts ...fuse.MountOption) fuse.InitFlags {
 		}
 	}()
 
+	defer func() {
+		err := fuse.Unmount(tmp)
+		if err != nil {
+			t.Errorf("error unmounting: %v", err)
+		}
+	}()
 	conn, err := fuse.Mount(tmp, opts...)
 	if err != nil {
 		t.Fatalf("error mounting: %v", err)
@@ -27,9 +33,6 @@ func getFeatures(t *testing.T, opts ...fuse.MountOption) fuse.InitFlags {
 	defer func() {
 		if err := conn.Close(); err != nil {
 			t.Errorf("error closing FUSE connection: %v", err)
-		}
-		if err := fuse.Unmount(tmp); err != nil {
-			t.Errorf("error unmounting: %v", err)
 		}
 	}()
 
