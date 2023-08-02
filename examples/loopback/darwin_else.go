@@ -2,7 +2,8 @@
 // Use of this source code is governed by a BSD
 // license that can be found in the LICENSE file.
 
-// +build darwin,amd64
+//go:build darwin && !386
+// +build darwin,!386
 
 package main
 
