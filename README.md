@@ -1,7 +1,7 @@
 github.com/anacrolix/fuse
 =========================
 
-This module supports implementing FUSE (Filesystems in Userspace) in Go. It supports MacFUSE 3.3+, 4, FUSE-T, and FUSE on Linux and FreeBSD.
+This module supports implementing FUSE (Filesystems in Userspace) in Go. It supports MacFUSE 3.3+, 4, and FUSE-T, on MacOS, and regular FUSE on Linux and FreeBSD.
 
 [`github.com/anacrolix/fuse`](https://github.com/anacrolix/fuse) is a fork of [`github.com/zegl/fuse`](https://github.com/zegl/fuse), which is a fork of [`bazil.org/fuse`](https://bazil.org/fuse).
 
