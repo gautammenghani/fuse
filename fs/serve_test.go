@@ -78,11 +78,16 @@ func TestMountpointDoesNotExist(t *testing.T) {
 
 	mountpoint := path.Join(tmp, "does-not-exist")
 	conn, err := fuse.Mount(mountpoint)
+
+	if err == nil {
+		<-conn.Ready
+		err = conn.MountError
+	}
 	if err == nil {
 		conn.Close()
 		t.Fatalf("expected error with non-existent mountpoint")
 	}
-	if _, ok := err.(*fuse.MountpointDoesNotExistError); !ok {
+	if _, ok := err.(*fuse.MountpointDoesNotExistError); !fuse.UsingFuseT && !ok {
 		t.Fatalf("wrong error from mount: %T: %v", err, err)
 	}
 }
@@ -259,7 +264,7 @@ func testStatfs(t *testing.T, helper *spawntest.Helper) {
 	if g, e := got.Bfree, uint64(10); g != e {
 		t.Errorf("got Bfree = %d; want %d", g, e)
 	}
-	if g, e := got.Bavail, uint64(3); g != e {
+	if g, e := got.Bavail, uint64(3); g != e && !fuse.UsingFuseT {
 		t.Errorf("got Bavail = %d; want %d", g, e)
 	}
 	if g, e := got.Files, uint64(13); g != e {
@@ -276,7 +281,7 @@ func testStatfs(t *testing.T, helper *spawntest.Helper) {
 		}
 	case "darwin":
 		// darwin gives 4096 here regardless of the fuse fs
-		if got.Bsize != 4096 {
+		if got.Bsize != 4096 && got.Bsize != 1048576 {
 			t.Errorf("darwin now implements statfs Bsize, please fix tests")
 		}
 	default:
@@ -404,12 +409,13 @@ func TestStatRoot(t *testing.T) {
 	if got.GID != 0 {
 		t.Errorf("root has wrong gid: %d", got.GID)
 	}
-	if g, e := got.Blksize, int64(65536); g != e {
-		// convert got.Blksize too because it's int64 on Linux but
-		// int32 on Darwin.
-		if g, e := int64(got.Blksize), int64(65536); g != e {
-			t.Errorf("root has wrong blocksize: %d != %d", g, e)
-		}
+
+	e := int64(65536)
+	if fuse.UsingFuseT {
+		e = 1048576
+	}
+	if g := got.Blksize; g != e {
+		t.Errorf("root has wrong blocksize: %d != %d", g, e)
 	}
 }
 
@@ -648,7 +654,11 @@ func TestWriteFileFlags(t *testing.T) {
 		//
 		// If this test starts failing in the future, that probably
 		// means they added the feature, and we want to notice that!
-		want = fuse.OpenWriteOnly
+		if fuse.UsingFuseT {
+			want &^= fuse.OpenAppend
+		} else {
+			want = fuse.OpenWriteOnly
+		}
 	}
 	if runtime.GOOS == "freebsd" {
 		// FreeBSD doesn't pass append to FUSE?
@@ -711,6 +721,11 @@ func TestRelease(t *testing.T) {
 		want.Flags &^= fuse.OpenNonblock
 		// no locking used but FreeBSD sets LockOwner?
 		got.LockOwner = 0
+	}
+	if runtime.GOOS == "darwin" {
+		if fuse.UsingFuseT {
+			want.Flags &^= fuse.OpenNonblock
+		}
 	}
 	if g, e := got, want; *g != *e {
 		t.Errorf("bad release:\ngot\t%v\nwant\t%v", g, e)
@@ -802,7 +817,7 @@ func TestWrite(t *testing.T) {
 	if err := control.JSON("/fsync").Call(ctx, struct{}{}, &nothing); err != nil {
 		t.Fatalf("calling helper: %v", err)
 	}
-	if w.RecordedFsync() == (fuse.FsyncRequest{}) {
+	if !fuse.UsingFuseT && w.RecordedFsync() == (fuse.FsyncRequest{}) {
 		t.Errorf("never received expected fsync call")
 	}
 	if got := string(w.RecordedWriteData()); got != hi {
@@ -1843,7 +1858,12 @@ func testFtruncate(t *testing.T, toSize int64) {
 	if g, e := gotr.Size, uint64(toSize); g != e {
 		t.Errorf("got Size = %q; want %q", g, e)
 	}
-	if g, e := gotr.Valid&^fuse.SetattrLockOwner, fuse.SetattrHandle|fuse.SetattrSize; g != e {
+	want := fuse.SetattrHandle | fuse.SetattrSize
+	if runtime.GOOS == "darwin" && fuse.UsingFuseT {
+		want &^= fuse.SetattrHandle
+	}
+
+	if g, e := gotr.Valid&^fuse.SetattrLockOwner, want; g != e {
 		t.Errorf("got Valid = %q; want %q", g, e)
 	}
 	t.Logf("Got request: %#v", gotr)
@@ -1911,6 +1931,9 @@ func TestTruncateWithOpen(t *testing.T) {
 		// just slipped by.
 		got &^= fuse.SetattrHandle
 	}
+	if runtime.GOOS == "darwin" && fuse.UsingFuseT {
+		got &^= fuse.SetattrHandle
+	}
 	if g, e := got&^fuse.SetattrLockOwner, fuse.SetattrSize; g != e {
 		t.Errorf("got Valid = %q; want %q", g, e)
 	}
@@ -1921,6 +1944,10 @@ func TestTruncateWithOpen(t *testing.T) {
 
 type readDirAll struct {
 	fstestutil.Dir
+}
+
+func (f *readDirAll) Lookup(ctx context.Context, name string) (fs.Node, error) {
+	return fstestutil.Dir{}, nil
 }
 
 func (d *readDirAll) ReadDirAll(ctx context.Context) ([]fuse.Dirent, error) {
@@ -2073,13 +2100,27 @@ func TestReadDirNotImplemented(t *testing.T) {
 }
 
 type readDirAllRewind struct {
-	fstestutil.Dir
+	//fstestutil.Dir
 	entries atomic.Value
 }
 
 func (d *readDirAllRewind) ReadDirAll(ctx context.Context) ([]fuse.Dirent, error) {
 	entries := d.entries.Load().([]fuse.Dirent)
 	return entries, nil
+}
+
+func (f *readDirAllRewind) Lookup(ctx context.Context, name string) (fs.Node, error) {
+	if name == "one" {
+		return fstestutil.Dir{}, nil
+	}
+	return fstestutil.File{}, nil
+}
+
+func (f readDirAllRewind) Attr(ctx context.Context, a *fuse.Attr) error {
+	a.Mode = os.ModeDir | 0o777
+	a.Ctime = time.Now()
+	a.Mtime = time.Now()
+	return nil
 }
 
 type readdirRewindHelp struct {
@@ -2151,8 +2192,7 @@ func TestReadDirAllRewind(t *testing.T) {
 			t.Fatalf("calling helper: %v", err)
 		}
 		t.Logf("Got readdir: %q", names)
-		if len(names) != 1 ||
-			names[0] != "one" {
+		if len(names) != 1 || names[0] != "one" {
 			t.Errorf(`expected  entry of "one", got: %q`, names)
 			return
 		}
@@ -2180,8 +2220,15 @@ func TestReadDirAllRewind(t *testing.T) {
 // Test Chmod.
 
 type chmod struct {
-	fstestutil.File
+	//fstestutil.File
 	record.Setattrs
+}
+
+func (f chmod) Attr(ctx context.Context, a *fuse.Attr) error {
+	a.Mode = 0o666
+	a.Inode = 2
+	a.Nlink = 1
+	return nil
 }
 
 func (f *chmod) Setattr(ctx context.Context, req *fuse.SetattrRequest, resp *fuse.SetattrResponse) error {
@@ -2431,6 +2478,11 @@ func (f *getxattr) Getxattr(ctx context.Context, req *fuse.GetxattrRequest, resp
 	return nil
 }
 
+func (f *getxattr) Listxattr(ctx context.Context, req *fuse.ListxattrRequest, resp *fuse.ListxattrResponse) error {
+	resp.Xattr = []byte("user.dummyxattr")
+	return nil
+}
+
 type getxattrRequest struct {
 	Path      string
 	Name      string
@@ -2513,6 +2565,11 @@ func (f *getxattrTooSmall) Getxattr(ctx context.Context, req *fuse.GetxattrReque
 	return nil
 }
 
+func (f *getxattrTooSmall) Listxattr(ctx context.Context, req *fuse.ListxattrRequest, resp *fuse.ListxattrResponse) error {
+	resp.Xattr = []byte("user.dummyxattr")
+	return nil
+}
+
 func TestGetxattrTooSmall(t *testing.T) {
 	maybeParallel(t)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -2546,6 +2603,11 @@ type getxattrSize struct {
 
 func (f *getxattrSize) Getxattr(ctx context.Context, req *fuse.GetxattrRequest, resp *fuse.GetxattrResponse) error {
 	resp.Xattr = []byte("hello, world")
+	return nil
+}
+
+func (f *getxattrSize) Listxattr(ctx context.Context, req *fuse.ListxattrRequest, resp *fuse.ListxattrResponse) error {
+	resp.Xattr = []byte("user.dummyxattr")
 	return nil
 }
 
@@ -2586,6 +2648,11 @@ type listxattr struct {
 func (f *listxattr) Listxattr(ctx context.Context, req *fuse.ListxattrRequest, resp *fuse.ListxattrResponse) error {
 	f.Listxattrs.Listxattr(ctx, req, resp)
 	resp.Append("user.one", "user.two")
+	return nil
+}
+
+func (f *listxattr) Getxattr(ctx context.Context, req *fuse.GetxattrRequest, resp *fuse.GetxattrResponse) error {
+	resp.Xattr = []byte("hello")
 	return nil
 }
 
@@ -2685,6 +2752,9 @@ func TestListxattr(t *testing.T) {
 		// when the size changed downward between the calls). Blargh.
 		want.Size = uint32(len("user.one\x00user.two\x00"))
 	}
+	if runtime.GOOS == "darwin" && fuse.UsingFuseT {
+		want.Size = 16384
+	}
 	if g, e := f.RecordedListxattr(), want; g != e {
 		t.Fatalf("listxattr saw %+v, want %+v", g, e)
 	}
@@ -2739,6 +2809,11 @@ func (f *listxattrSize) Listxattr(ctx context.Context, req *fuse.ListxattrReques
 	return nil
 }
 
+func (f *listxattrSize) Getxattr(ctx context.Context, req *fuse.GetxattrRequest, resp *fuse.GetxattrResponse) error {
+	resp.Xattr = []byte("")
+	return nil
+}
+
 func TestListxattrSize(t *testing.T) {
 	if runtime.GOOS == "freebsd" {
 		t.Skip("FreeBSD xattr list format is different and the kernel has intermediate buffer; can't drive FUSE requests directly from userspace")
@@ -2780,6 +2855,16 @@ type setxattrRequest struct {
 	Name  string
 	Data  []byte
 	Flags int
+}
+
+func (f *setxattr) Listxattr(ctx context.Context, req *fuse.ListxattrRequest, resp *fuse.ListxattrResponse) error {
+	resp.Xattr = []byte("one")
+	return nil
+}
+
+func (f *setxattr) Getxattr(ctx context.Context, req *fuse.GetxattrRequest, resp *fuse.GetxattrResponse) error {
+	resp.Xattr = []byte("")
+	return nil
 }
 
 func doSetxattr(ctx context.Context, req setxattrRequest) (*struct{}, error) {
@@ -2860,6 +2945,16 @@ type removexattr struct {
 type removexattrRequest struct {
 	Path string
 	Name string
+}
+
+func (f *removexattr) Listxattr(ctx context.Context, req *fuse.ListxattrRequest, resp *fuse.ListxattrResponse) error {
+	resp.Xattr = []byte("user.greeting")
+	return nil
+}
+
+func (f *removexattr) Getxattr(ctx context.Context, req *fuse.GetxattrRequest, resp *fuse.GetxattrResponse) error {
+	resp.Xattr = []byte("")
+	return nil
 }
 
 func doRemovexattr(ctx context.Context, req removexattrRequest) (*struct{}, error) {
@@ -3172,6 +3267,9 @@ func TestDirectRead(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer mnt.Close()
+	if fuse.UsingFuseT {
+		t.Skip("direct read not supported")
+	}
 	control := readHelper.Spawn(ctx, t)
 	defer control.Close()
 	var got readResult
@@ -3386,6 +3484,7 @@ func (i *invalidateData) Attr(ctx context.Context, a *fuse.Attr) error {
 	i.t.Logf("Attr called, #%d", i.attr.Count())
 	a.Mode = 0o600
 	a.Size = uint64(len(i.data.Load().(string)))
+	a.Ctime = time.Now()
 	return nil
 }
 
@@ -3890,6 +3989,10 @@ func TestNotifyStore(t *testing.T) {
 	control := readHelper.Spawn(ctx, t)
 	defer control.Close()
 
+	if fuse.UsingFuseT {
+		t.Skip("no notify on macos")
+	}
+
 	// prove that read doesn't work, and make sure node is cached
 	{
 		control := readErrHelper.Spawn(ctx, t)
@@ -3945,6 +4048,10 @@ func TestNotifyRetrieve(t *testing.T) {
 	defer mnt.Close()
 	control := readHelper.Spawn(ctx, t)
 	defer control.Close()
+
+	if fuse.UsingFuseT {
+		t.Skip("no notify on macos")
+	}
 
 	// read to fill page cache
 	var got readResult
@@ -4135,6 +4242,9 @@ func TestReadPollNode(t *testing.T) {
 	if runtime.GOOS == "freebsd" {
 		t.Skip("no poll on FreeBSD")
 	}
+	if fuse.UsingFuseT {
+		t.Skip("no poll on macos")
+	}
 	maybeParallel(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -4190,6 +4300,9 @@ func (f *readPolledNodeWithHandle) Open(ctx context.Context, req *fuse.OpenReque
 func TestReadPollHandle(t *testing.T) {
 	if runtime.GOOS == "freebsd" {
 		t.Skip("no poll on FreeBSD")
+	}
+	if fuse.UsingFuseT {
+		t.Skip("no poll on macos")
 	}
 	maybeParallel(t)
 	ctx, cancel := context.WithCancel(context.Background())
