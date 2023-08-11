@@ -41,6 +41,15 @@ func (m *mountConfig) getOptions() string {
 	return strings.Join(opts, ",")
 }
 
+func (m *mountConfig) isReadonly() bool {
+	_, e := m.options["ro"]
+	return e
+}
+
+func (m *mountConfig) fsname() string {
+	return m.options["fsname"]
+}
+
 type mountOption func(*mountConfig) error
 
 // MountOption is passed to Mount to change the behavior of the mount.

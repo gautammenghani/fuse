@@ -188,7 +188,7 @@ func Mount(dir string, options ...MountOption) (*Conn, error) {
 		return nil, err
 	}
 
-	return c, nil
+	return c, c.MountError
 }
 
 type OldVersionError struct {
@@ -590,7 +590,7 @@ func readAll(fd int, dest []byte) (int, error) {
 		n, err := syscall.Read(fd, dest[offset:])
 		if n == 0 && err == nil {
 			// remote fd closed
-			return n, err
+			return n, io.EOF
 		}
 		offset += n
 		if err != nil {
@@ -624,7 +624,8 @@ loop:
 	c.rio.Lock()
 	var n int
 	var err error
-	if !osxFuse {
+
+	if UsingFuseT {
 		n, err = c.ReadSingle(m.buf)
 	} else {
 		n, err = syscall.Read(c.fd(), m.buf)
@@ -730,7 +731,7 @@ loop:
 			Size:     in.Size,
 			Atime:    time.Unix(int64(in.Atime), int64(in.AtimeNsec)),
 			Mtime:    time.Unix(int64(in.Mtime), int64(in.MtimeNsec)),
-			Mode:     fileMode(in.Mode),
+			Mode:     fileMode(in.Mode) & 0777,
 			Uid:      in.Uid,
 			Gid:      in.Gid,
 			Bkuptime: in.BkupTime(),

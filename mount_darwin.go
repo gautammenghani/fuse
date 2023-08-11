@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"reflect"
 	"strconv"
 	"syscall"
 	"unsafe"
@@ -12,7 +13,7 @@ import (
 
 const FUSET_SRV_PATH = "/usr/local/bin/go-nfsv4"
 
-var osxFuse = true
+var UsingFuseT bool = false
 
 func fusetBinary() (string, error) {
 	srv_path := os.Getenv("FUSE_NFSSRV_PATH")
@@ -49,8 +50,14 @@ func mount_fuset(bin string, mountPoint string, conf *mountConfig, ready chan<- 
 
 	defer syscall.Close(remote_mon)
 
-	args := []string{}
-	// TODO: apply args: -ro, -volname, ...
+	args := []string{"-noattrcache=true"}
+	if conf.isReadonly() {
+		args = append(args, "-r")
+	}
+	if conf.fsname() != "" {
+		args = append(args, "--volname="+conf.fsname())
+	}
+	// TODO: apply more args
 
 	remote_file = os.NewFile(uintptr(remote), "")
 	remote_mon_file = os.NewFile(uintptr(remote_mon), "")
@@ -91,6 +98,9 @@ func mount_fuset(bin string, mountPoint string, conf *mountConfig, ready chan<- 
 			if _, err = local_mon_file.Read(reply); err != nil {
 				err = fmt.Errorf("fuse-t failed: %v", err)
 			}
+			if !reflect.DeepEqual(reply, []byte{0x0, 0x0, 0x0, 0x0}) {
+				err = fmt.Errorf("moint failed")
+			}
 		}
 
 		*errp = err
@@ -103,7 +113,7 @@ func mount_fuset(bin string, mountPoint string, conf *mountConfig, ready chan<- 
 func mount(mountPoint string, conf *mountConfig, ready chan<- struct{}, errp *error) (*os.File, error) {
 
 	if fuset_bin, err := fusetBinary(); err == nil {
-		osxFuse = false
+		UsingFuseT = true
 		return mount_fuset(fuset_bin, mountPoint, conf, ready, errp)
 	}
 
