@@ -28,8 +28,6 @@ func fusetBinary() (string, error) {
 	return "", fmt.Errorf("FUSE-T not found")
 }
 
-var remote_file, local_file, remote_mon_file, local_mon_file *os.File
-
 func mount_fuset(bin string, mountPoint string, conf *mountConfig, ready chan<- struct{}, errp *error) (*os.File, error) {
 	fds, err := syscall.Socketpair(syscall.AF_UNIX, syscall.SOCK_STREAM, 0)
 	if err != nil {
@@ -59,10 +57,10 @@ func mount_fuset(bin string, mountPoint string, conf *mountConfig, ready chan<- 
 	}
 	// TODO: apply more args
 
-	remote_file = os.NewFile(uintptr(remote), "")
-	remote_mon_file = os.NewFile(uintptr(remote_mon), "")
-	local_file = os.NewFile(uintptr(local), "")
-	local_mon_file = os.NewFile(uintptr(local_mon), "")
+	remote_file := os.NewFile(uintptr(remote), "")
+	remote_mon_file := os.NewFile(uintptr(remote_mon), "")
+	local_file := os.NewFile(uintptr(local), "")
+	local_mon_file := os.NewFile(uintptr(local_mon), "")
 
 	args = append(args, fmt.Sprintf("--rwsize=%d", maxWrite))
 	args = append(args, mountPoint)
@@ -90,7 +88,7 @@ func mount_fuset(bin string, mountPoint string, conf *mountConfig, ready chan<- 
 
 	cmd.Process.Release()
 	go func() {
-
+		var err error
 		if _, err = local_mon_file.Write([]byte("mount")); err != nil {
 			err = fmt.Errorf("fuse-t failed: %v", err)
 		} else {
