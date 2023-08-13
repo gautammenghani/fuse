@@ -87,7 +87,7 @@ func TestMountpointDoesNotExist(t *testing.T) {
 		conn.Close()
 		t.Fatalf("expected error with non-existent mountpoint")
 	}
-	if _, ok := err.(*fuse.MountpointDoesNotExistError); !fuse.UsingFuseT && !ok {
+	if _, ok := err.(*fuse.MountpointDoesNotExistError); !conn.Backend().IsFuseT() && !ok {
 		t.Fatalf("wrong error from mount: %T: %v", err, err)
 	}
 }
@@ -264,7 +264,7 @@ func testStatfs(t *testing.T, helper *spawntest.Helper) {
 	if g, e := got.Bfree, uint64(10); g != e {
 		t.Errorf("got Bfree = %d; want %d", g, e)
 	}
-	if g, e := got.Bavail, uint64(3); g != e && !fuse.UsingFuseT {
+	if g, e := got.Bavail, uint64(3); g != e && !mnt.Backend().IsFuseT() {
 		t.Errorf("got Bavail = %d; want %d", g, e)
 	}
 	if g, e := got.Files, uint64(13); g != e {
@@ -411,7 +411,7 @@ func TestStatRoot(t *testing.T) {
 	}
 
 	e := int64(65536)
-	if fuse.UsingFuseT {
+	if mnt.Backend().IsFuseT() {
 		e = 1048576
 	}
 	if g := got.Blksize; g != e {
@@ -654,7 +654,7 @@ func TestWriteFileFlags(t *testing.T) {
 		//
 		// If this test starts failing in the future, that probably
 		// means they added the feature, and we want to notice that!
-		if fuse.UsingFuseT {
+		if mnt.Backend().IsFuseT() {
 			want &^= fuse.OpenAppend
 		} else {
 			want = fuse.OpenWriteOnly
@@ -723,7 +723,7 @@ func TestRelease(t *testing.T) {
 		got.LockOwner = 0
 	}
 	if runtime.GOOS == "darwin" {
-		if fuse.UsingFuseT {
+		if mnt.Backend().IsFuseT() {
 			want.Flags &^= fuse.OpenNonblock
 		}
 	}
@@ -817,7 +817,7 @@ func TestWrite(t *testing.T) {
 	if err := control.JSON("/fsync").Call(ctx, struct{}{}, &nothing); err != nil {
 		t.Fatalf("calling helper: %v", err)
 	}
-	if !fuse.UsingFuseT && w.RecordedFsync() == (fuse.FsyncRequest{}) {
+	if !mnt.Backend().IsFuseT() && w.RecordedFsync() == (fuse.FsyncRequest{}) {
 		t.Errorf("never received expected fsync call")
 	}
 	if got := string(w.RecordedWriteData()); got != hi {
@@ -1859,7 +1859,7 @@ func testFtruncate(t *testing.T, toSize int64) {
 		t.Errorf("got Size = %q; want %q", g, e)
 	}
 	want := fuse.SetattrHandle | fuse.SetattrSize
-	if runtime.GOOS == "darwin" && fuse.UsingFuseT {
+	if runtime.GOOS == "darwin" && mnt.Backend().IsFuseT() {
 		want &^= fuse.SetattrHandle
 	}
 
@@ -1931,7 +1931,7 @@ func TestTruncateWithOpen(t *testing.T) {
 		// just slipped by.
 		got &^= fuse.SetattrHandle
 	}
-	if runtime.GOOS == "darwin" && fuse.UsingFuseT {
+	if runtime.GOOS == "darwin" && mnt.Backend().IsFuseT() {
 		got &^= fuse.SetattrHandle
 	}
 	if g, e := got&^fuse.SetattrLockOwner, fuse.SetattrSize; g != e {
@@ -2752,7 +2752,7 @@ func TestListxattr(t *testing.T) {
 		// when the size changed downward between the calls). Blargh.
 		want.Size = uint32(len("user.one\x00user.two\x00"))
 	}
-	if runtime.GOOS == "darwin" && fuse.UsingFuseT {
+	if runtime.GOOS == "darwin" && mnt.Backend().IsFuseT() {
 		want.Size = 16384
 	}
 	if g, e := f.RecordedListxattr(), want; g != e {
@@ -3267,7 +3267,7 @@ func TestDirectRead(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer mnt.Close()
-	if fuse.UsingFuseT {
+	if mnt.Backend().IsFuseT() {
 		t.Skip("direct read not supported")
 	}
 	control := readHelper.Spawn(ctx, t)
@@ -3989,7 +3989,7 @@ func TestNotifyStore(t *testing.T) {
 	control := readHelper.Spawn(ctx, t)
 	defer control.Close()
 
-	if fuse.UsingFuseT {
+	if mnt.Backend().IsFuseT() {
 		t.Skip("no notify on macos")
 	}
 
@@ -4049,7 +4049,7 @@ func TestNotifyRetrieve(t *testing.T) {
 	control := readHelper.Spawn(ctx, t)
 	defer control.Close()
 
-	if fuse.UsingFuseT {
+	if mnt.Backend().IsFuseT() {
 		t.Skip("no notify on macos")
 	}
 
@@ -4242,9 +4242,6 @@ func TestReadPollNode(t *testing.T) {
 	if runtime.GOOS == "freebsd" {
 		t.Skip("no poll on FreeBSD")
 	}
-	if fuse.UsingFuseT {
-		t.Skip("no poll on macos")
-	}
 	maybeParallel(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -4263,6 +4260,9 @@ func TestReadPollNode(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer mnt.Close()
+	if mnt.Backend().IsFuseT() {
+		t.Skip("no poll on macos")
+	}
 	control := readHelper.Spawn(ctx, t)
 	defer control.Close()
 	var got readResult
@@ -4301,9 +4301,6 @@ func TestReadPollHandle(t *testing.T) {
 	if runtime.GOOS == "freebsd" {
 		t.Skip("no poll on FreeBSD")
 	}
-	if fuse.UsingFuseT {
-		t.Skip("no poll on macos")
-	}
 	maybeParallel(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -4322,6 +4319,9 @@ func TestReadPollHandle(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer mnt.Close()
+	if mnt.Backend().IsFuseT() {
+		t.Skip("no poll on macos")
+	}
 	control := readHelper.Spawn(ctx, t)
 	defer control.Close()
 	var got readResult

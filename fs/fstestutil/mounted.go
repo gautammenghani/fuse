@@ -63,6 +63,10 @@ func (mnt *Mount) Close() {
 	os.Remove(mnt.Dir)
 }
 
+func (mnt *Mount) Backend() fuse.Backend {
+	return mnt.Conn.Backend()
+}
+
 // MountedFunc mounts a filesystem at a temporary directory. The
 // filesystem used is constructed by calling a function, to allow
 // storing fuse.Conn and fs.Server in the FS.

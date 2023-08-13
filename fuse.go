@@ -124,9 +124,10 @@ type Conn struct {
 
 	// File handle for kernel communication. Only safe to access if
 	// rio or wio is held.
-	dev *os.File
-	wio sync.RWMutex
-	rio sync.RWMutex
+	dev     *os.File
+	backend Backend
+	wio     sync.RWMutex
+	rio     sync.RWMutex
 
 	// Protocol version negotiated with initRequest/initResponse.
 	proto Protocol
@@ -170,11 +171,11 @@ func Mount(dir string, options ...MountOption) (*Conn, error) {
 	c := &Conn{
 		Ready: ready,
 	}
-	f, err := mount(dir, &conf, ready, &c.MountError)
+	var err error
+	c.dev, c.backend, err = mount(dir, &conf, ready, &c.MountError)
 	if err != nil {
 		return nil, err
 	}
-	c.dev = f
 
 	if err := initMount(c, &conf); err != nil {
 		c.Close()
@@ -625,7 +626,7 @@ loop:
 	var n int
 	var err error
 
-	if UsingFuseT {
+	if c.backend.IsFuseT() {
 		n, err = c.ReadSingle(m.buf)
 	} else {
 		n, err = syscall.Read(c.fd(), m.buf)
@@ -2825,4 +2826,8 @@ type QueryLockResponse struct {
 
 func (r *QueryLockResponse) String() string {
 	return fmt.Sprintf("QueryLock range=%d..%d type=%v pid=%v", r.Lock.Start, r.Lock.End, r.Lock.Type, r.Lock.PID)
+}
+
+func (c *Conn) Backend() Backend {
+	return c.backend
 }

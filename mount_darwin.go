@@ -13,8 +13,6 @@ import (
 
 const FUSET_SRV_PATH = "/usr/local/bin/go-nfsv4"
 
-var UsingFuseT bool = false
-
 func fusetBinary() (string, error) {
 	srv_path := os.Getenv("FUSE_NFSSRV_PATH")
 	if srv_path == "" {
@@ -108,11 +106,18 @@ func mount_fuset(bin string, mountPoint string, conf *mountConfig, ready chan<- 
 	return local_file, err
 }
 
-func mount(mountPoint string, conf *mountConfig, ready chan<- struct{}, errp *error) (*os.File, error) {
-
-	if fuset_bin, err := fusetBinary(); err == nil {
-		UsingFuseT = true
-		return mount_fuset(fuset_bin, mountPoint, conf, ready, errp)
+func mount(mountPoint string, conf *mountConfig, ready chan<- struct{}, errp *error) (f *os.File, be Backend, err error) {
+	if forcedBackend.IsUnset() || forcedBackend.IsFuseT() {
+		var fuset_bin string
+		fuset_bin, err = fusetBinary()
+		if err == nil {
+			f, err = mount_fuset(fuset_bin, mountPoint, conf, ready, errp)
+			be = fuseTBackend
+			return
+		}
+		if forcedBackend.IsFuseT() {
+			return
+		}
 	}
 
 	locations := conf.osxfuseLocations
@@ -133,12 +138,13 @@ func mount(mountPoint string, conf *mountConfig, ready chan<- struct{}, errp *er
 		break
 	}
 	if binLocation == "" {
-		return nil, ErrOSXFUSENotFound
+		err = ErrOSXFUSENotFound
+		return
 	}
 
 	local, remote, err := unixgramSocketpair()
 	if err != nil {
-		return nil, err
+		return
 	}
 
 	defer local.Close()
@@ -170,16 +176,16 @@ func mount(mountPoint string, conf *mountConfig, ready chan<- struct{}, errp *er
 	cmd.Stderr = &errOut
 
 	if err = cmd.Start(); err != nil {
-		return nil, err
+		return
 	}
 
 	fd, err := getConnection(local)
 	if err != nil {
-		return nil, err
+		return
 	}
 
 	go func() {
-		// wait inside a goroutine or otherwise it would block forever for unknown reasons
+		// wait inside a goroutine, or otherwise it would block forever for unknown reasons
 		if err := cmd.Wait(); err != nil {
 			err = fmt.Errorf("mount_osxfusefs failed: %v. Stderr: %s, Stdout: %s",
 				err, errOut.String(), out.String())
@@ -190,13 +196,15 @@ func mount(mountPoint string, conf *mountConfig, ready chan<- struct{}, errp *er
 
 	dup, err := syscall.Dup(int(fd.Fd()))
 	if err != nil {
-		return nil, err
+		return
 	}
 
 	syscall.CloseOnExec(int(fd.Fd()))
 	syscall.CloseOnExec(dup)
 
-	return os.NewFile(uintptr(dup), "macfuse"), err
+	f = os.NewFile(uintptr(dup), "macfuse")
+	be = osxfuseBackend
+	return
 }
 
 func unixgramSocketpair() (l, r *os.File, err error) {
