@@ -28,3 +28,23 @@ var forcedBackend = func() (ret Backend) {
 	}
 	return
 }()
+
+// Extra state to be managed per backend.
+type backendState interface {
+	Drop()
+}
+
+// FUSE-T requires we hold on to some extra file descriptors for the duration of the connection.
+type fuseTBackendState struct {
+	extraFiles []*os.File
+}
+
+func (bes fuseTBackendState) Drop() {
+	for _, f := range bes.extraFiles {
+		f.Close()
+	}
+}
+
+type nopBackendState struct{}
+
+func (nopBackendState) Drop() {}

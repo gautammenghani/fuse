@@ -124,10 +124,11 @@ type Conn struct {
 
 	// File handle for kernel communication. Only safe to access if
 	// rio or wio is held.
-	dev     *os.File
-	backend Backend
-	wio     sync.RWMutex
-	rio     sync.RWMutex
+	dev          *os.File
+	backend      Backend
+	backendState backendState
+	wio          sync.RWMutex
+	rio          sync.RWMutex
 
 	// Protocol version negotiated with initRequest/initResponse.
 	proto Protocol
@@ -172,7 +173,7 @@ func Mount(dir string, options ...MountOption) (*Conn, error) {
 		Ready: ready,
 	}
 	var err error
-	c.dev, c.backend, err = mount(dir, &conf, ready, &c.MountError)
+	c.dev, c.backend, c.backendState, err = mount(dir, &conf, ready, &c.MountError)
 	if err != nil {
 		return nil, err
 	}
@@ -564,6 +565,7 @@ func (c *Conn) Close() error {
 	defer c.wio.Unlock()
 	c.rio.Lock()
 	defer c.rio.Unlock()
+	c.backendState.Drop()
 	return c.dev.Close()
 }
 

@@ -26,10 +26,10 @@ func fusetBinary() (string, error) {
 	return "", fmt.Errorf("FUSE-T not found")
 }
 
-func mount_fuset(bin string, mountPoint string, conf *mountConfig, ready chan<- struct{}, errp *error) (*os.File, error) {
+func mount_fuset(bin string, mountPoint string, conf *mountConfig, ready chan<- struct{}, errp *error) (_ *os.File, _ fuseTBackendState, err error) {
 	fds, err := syscall.Socketpair(syscall.AF_UNIX, syscall.SOCK_STREAM, 0)
 	if err != nil {
-		return nil, err
+		return
 	}
 	local := fds[0]
 	remote := fds[1]
@@ -38,7 +38,7 @@ func mount_fuset(bin string, mountPoint string, conf *mountConfig, ready chan<- 
 
 	fds, err = syscall.Socketpair(syscall.AF_UNIX, syscall.SOCK_STREAM, 0)
 	if err != nil {
-		return nil, err
+		return
 	}
 
 	local_mon := fds[0]
@@ -81,7 +81,7 @@ func mount_fuset(bin string, mountPoint string, conf *mountConfig, ready chan<- 
 	syscall.CloseOnExec(local_mon)
 
 	if err = cmd.Start(); err != nil {
-		return nil, err
+		return
 	}
 
 	cmd.Process.Release()
@@ -103,15 +103,22 @@ func mount_fuset(bin string, mountPoint string, conf *mountConfig, ready chan<- 
 		close(ready)
 	}()
 
-	return local_file, err
+	return local_file, fuseTBackendState{
+		// Prevent these files from being GCed.
+		extraFiles: []*os.File{
+			remote_file,
+			remote_mon_file,
+			local_mon_file,
+		},
+	}, err
 }
 
-func mount(mountPoint string, conf *mountConfig, ready chan<- struct{}, errp *error) (f *os.File, be Backend, err error) {
+func mount(mountPoint string, conf *mountConfig, ready chan<- struct{}, errp *error) (f *os.File, be Backend, bes backendState, err error) {
 	if forcedBackend.IsUnset() || forcedBackend.IsFuseT() {
 		var fuset_bin string
 		fuset_bin, err = fusetBinary()
 		if err == nil {
-			f, err = mount_fuset(fuset_bin, mountPoint, conf, ready, errp)
+			f, bes, err = mount_fuset(fuset_bin, mountPoint, conf, ready, errp)
 			be = fuseTBackend
 			return
 		}
@@ -204,6 +211,7 @@ func mount(mountPoint string, conf *mountConfig, ready chan<- struct{}, errp *er
 
 	f = os.NewFile(uintptr(dup), "macfuse")
 	be = osxfuseBackend
+	bes = nopBackendState{}
 	return
 }
 
