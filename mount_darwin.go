@@ -46,7 +46,9 @@ func mount_fuset(bin string, mountPoint string, conf *mountConfig, ready chan<- 
 
 	defer syscall.Close(remote_mon)
 
-	args := []string{"-noattrcache=true"}
+	args := []string{
+		"--attrcache=false",
+	}
 	if conf.isReadonly() {
 		args = append(args, "-r")
 	}
