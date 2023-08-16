@@ -6,6 +6,7 @@ import (
 	"runtime"
 	"testing"
 
+	_ "github.com/anacrolix/envpprof"
 	"github.com/anacrolix/fuse"
 )
 
