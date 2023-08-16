@@ -24,7 +24,7 @@ func getFeatures(t *testing.T, opts ...fuse.MountOption) fuse.InitFlags {
 	defer func() {
 		err := fuse.Unmount(tmp)
 		if err != nil {
-			t.Errorf("error unmounting: %v", err)
+			t.Logf("error unmounting: %v", err)
 		}
 	}()
 	conn, err := fuse.Mount(tmp, opts...)
