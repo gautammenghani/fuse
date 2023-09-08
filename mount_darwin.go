@@ -26,7 +26,13 @@ func fusetBinary() (string, error) {
 	return "", fmt.Errorf("FUSE-T not found")
 }
 
-func mount_fuset(bin string, mountPoint string, conf *mountConfig, ready chan<- struct{}, errp *error) (_ *os.File, _ fuseTBackendState, err error) {
+func mountFuseT(
+	bin string,
+	mountPoint string,
+	conf *mountConfig,
+	ready chan<- struct{},
+	errp *error,
+) (_ *os.File, _ fuseTBackendState, err error) {
 	fds, err := syscall.Socketpair(syscall.AF_UNIX, syscall.SOCK_STREAM, 0)
 	if err != nil {
 		return
@@ -115,12 +121,22 @@ func mount_fuset(bin string, mountPoint string, conf *mountConfig, ready chan<- 
 	}, err
 }
 
-func mount(mountPoint string, conf *mountConfig, ready chan<- struct{}, errp *error) (f *os.File, be Backend, bes backendState, err error) {
+func mount(
+	mountPoint string,
+	conf *mountConfig,
+	ready chan<- struct{},
+	errp *error,
+) (
+	f *os.File,
+	be Backend,
+	bes backendState,
+	err error,
+) {
 	if forcedBackend.IsUnset() || forcedBackend.IsFuseT() {
-		var fuset_bin string
-		fuset_bin, err = fusetBinary()
+		var fuseTBin string
+		fuseTBin, err = fusetBinary()
 		if err == nil {
-			f, bes, err = mount_fuset(fuset_bin, mountPoint, conf, ready, errp)
+			f, bes, err = mountFuseT(fuseTBin, mountPoint, conf, ready, errp)
 			be = fuseTBackend
 			return
 		}
