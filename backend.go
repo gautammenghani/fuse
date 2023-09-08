@@ -21,13 +21,19 @@ func (be Backend) IsUnset() bool {
 	return be == ""
 }
 
-var forcedBackend = func() (ret Backend) {
+var forcedBackend Backend
+
+func initForcedBackend() {
+	forcedBackend = getForcedBackend()
+}
+
+func getForcedBackend() (ret Backend) {
 	ret = Backend(strings.ToUpper(strings.TrimSpace(os.Getenv("FUSE_FORCE_BACKEND"))))
 	if !ret.IsUnset() {
 		Logger.Levelf(log.Info, "forcing backend %v", ret)
 	}
 	return
-}()
+}
 
 // Extra state to be managed per backend.
 type backendState interface {
