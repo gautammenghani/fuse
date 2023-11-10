@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD
 // license that can be found in the LICENSE file.
 
-//go:build linux && amd64
-// +build linux,amd64
+//go:build linux && !386
+// +build linux,!386
 
 package main
 

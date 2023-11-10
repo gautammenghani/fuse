@@ -55,13 +55,19 @@ func isBoringFusermountError(err error) bool {
 	return false
 }
 
-func mount(dir string, conf *mountConfig, ready chan<- struct{}, errp *error) (fusefd *os.File, err error) {
+func mount(
+	dir string,
+	conf *mountConfig,
+	ready chan<- struct{},
+	errp *error,
+) (fusefd *os.File, _ Backend, _ backendState, err error) {
 	// linux mount is never delayed
 	close(ready)
 
 	fds, err := syscall.Socketpair(syscall.AF_FILE, syscall.SOCK_STREAM, 0)
 	if err != nil {
-		return nil, fmt.Errorf("socketpair error: %v", err)
+		err = fmt.Errorf("socketpair error: %v", err)
+		return
 	}
 
 	writeFile := os.NewFile(uintptr(fds[0]), "fusermount-child-writes")
@@ -83,22 +89,25 @@ func mount(dir string, conf *mountConfig, ready chan<- struct{}, errp *error) (f
 	var wg sync.WaitGroup
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		return nil, fmt.Errorf("setting up fusermount stderr: %v", err)
+		err = fmt.Errorf("setting up fusermount stderr: %v", err)
+		return
 	}
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
-		return nil, fmt.Errorf("setting up fusermount stderr: %v", err)
+		err = fmt.Errorf("setting up fusermount stderr: %v", err)
+		return
 	}
 
-	if err := cmd.Start(); err != nil {
-		return nil, fmt.Errorf("fusermount: %v", err)
+	if err = cmd.Start(); err != nil {
+		err = fmt.Errorf("fusermount: %v", err)
+		return
 	}
 	helperErrCh := make(chan error, 1)
 	wg.Add(2)
 	go lineLogger(&wg, "mount helper output", neverIgnoreLine, stdout)
 	go lineLogger(&wg, "mount helper error", handleFusermountStderr(helperErrCh), stderr)
 	wg.Wait()
-	if err := cmd.Wait(); err != nil {
+	if err = cmd.Wait(); err != nil {
 		// see if we have a better error to report
 		select {
 		case helperErr := <-helperErrCh:
@@ -108,23 +117,27 @@ func mount(dir string, conf *mountConfig, ready chan<- struct{}, errp *error) (f
 			}
 			// and now return what we grabbed from stderr as the real
 			// error
-			return nil, helperErr
+			err = helperErr
+			return
 		default:
 			// nope, fall back to generic message
 		}
 
-		return nil, fmt.Errorf("fusermount: %v", err)
+		err = fmt.Errorf("fusermount: %v", err)
+		return
 	}
 
 	c, err := net.FileConn(readFile)
 	if err != nil {
-		return nil, fmt.Errorf("FileConn from fusermount socket: %v", err)
+		err = fmt.Errorf("FileConn from fusermount socket: %v", err)
+		return
 	}
 	defer c.Close()
 
 	uc, ok := c.(*net.UnixConn)
 	if !ok {
-		return nil, fmt.Errorf("unexpected FileConn type; expected UnixConn, got %T", c)
+		err = fmt.Errorf("unexpected FileConn type; expected UnixConn, got %T", c)
+		return
 	}
 
 	buf := make([]byte, 32) // expect 1 byte
@@ -132,19 +145,23 @@ func mount(dir string, conf *mountConfig, ready chan<- struct{}, errp *error) (f
 	_, oobn, _, _, err := uc.ReadMsgUnix(buf, oob)
 	scms, err := syscall.ParseSocketControlMessage(oob[:oobn])
 	if err != nil {
-		return nil, fmt.Errorf("ParseSocketControlMessage: %v", err)
+		err = fmt.Errorf("ParseSocketControlMessage: %v", err)
+		return
 	}
 	if len(scms) != 1 {
-		return nil, fmt.Errorf("expected 1 SocketControlMessage; got scms = %#v", scms)
+		err = fmt.Errorf("expected 1 SocketControlMessage; got scms = %#v", scms)
+		return
 	}
 	scm := scms[0]
 	gotFds, err := syscall.ParseUnixRights(&scm)
 	if err != nil {
-		return nil, fmt.Errorf("syscall.ParseUnixRights: %v", err)
+		err = fmt.Errorf("syscall.ParseUnixRights: %v", err)
+		return
 	}
 	if len(gotFds) != 1 {
-		return nil, fmt.Errorf("wanted 1 fd; got %#v", gotFds)
+		err = fmt.Errorf("wanted 1 fd; got %#v", gotFds)
+		return
 	}
-	f := os.NewFile(uintptr(gotFds[0]), "/dev/fuse")
-	return f, nil
+	fusefd = os.NewFile(uintptr(gotFds[0]), "/dev/fuse")
+	return
 }
