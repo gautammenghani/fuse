@@ -541,6 +541,10 @@ func fileMode(unixMode uint32) os.FileMode {
 	if unixMode&syscall.S_ISVTX != 0 {
 		mode |= os.ModeSticky
 	}
+	if unixMode&syscall.S_ISVTX != 0 {
+                mode |= os.ModeSticky
+        }
+
 	return mode
 }
 
