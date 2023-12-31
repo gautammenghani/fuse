@@ -1,4 +1,4 @@
-module github.com/anacrolix/fuse
+module github.com/gautammenghani/fuse
 
 go 1.13
 
